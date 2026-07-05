@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "日常管理",
+  "navigationBarBackgroundColor": "#1D3D7A",
+  "navigationBarTextStyle": "white",
+  "backgroundColorTop": "#1D3D7A",
+  "backgroundColor": "#F7F8FA",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "light"
+}

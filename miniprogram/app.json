@@ -1,0 +1,90 @@
+{
+  "pages": [
+    "pages/merchant/tab-daily/tab-daily",
+    "pages/merchant/tab-statistics/tab-statistics",
+    "pages/index/index",
+    "pages/orders/orders",
+    "pages/daily/daily",
+    "pages/merchant/apply/apply",
+    "pages/merchant/tab-store/tab-store",
+    "pages/user/login/login",
+    "pages/user/pets/pets",
+    "pages/user/pet-form/pet-form",
+    "pages/user/reserve/reserve",
+    "pages/user/boarding-contract/boarding-contract",
+    "pages/merchant/coop-contract/coop-contract",
+    "pages/admin/merchant-auth/merchant-auth",
+    "pages/user/order-detail/order-detail",
+    "pages/user/order-edit/order-edit",
+    "pages/user/contract/contract",
+    "pages/user/contract-sign/contract-sign",
+    "pages/user/pet-daily/pet-daily",
+    "pages/merchant/dashboard/dashboard",
+    "pages/merchant/orders/orders",
+    "pages/merchant/order-detail/order-detail",
+    "pages/merchant/order-price/order-price",
+    "pages/merchant/pets/pets",
+    "pages/merchant/contract/contract",
+    "pages/merchant/contract-edit/contract-edit",
+    "pages/merchant/daily-check/daily-check",
+    "pages/merchant/daily-logs/daily-logs",
+    "pages/merchant/chat/chat",
+    "pages/merchant/pickup-manage/pickup-manage",
+    "pages/merchant/statistics/statistics",
+    "pages/merchant/staff-manage/staff-manage",
+    "pages/merchant/settings/settings"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#1D3D7A",
+    "navigationBarTitleText": "宠物寄养",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F7F8FA",
+    "backgroundColorTop": "#1D3D7A",
+    "backgroundColorBottom": "#F7F8FA"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#999999",
+    "selectedColor": "#1D3D7A",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "images/tab/tab-home.png",
+        "selectedIconPath": "images/tab/tab-home-active.png"
+      },
+      {
+        "pagePath": "pages/orders/orders",
+        "text": "订单",
+        "iconPath": "images/tab/tab-order.png",
+        "selectedIconPath": "images/tab/tab-order-active.png"
+      },
+      {
+        "pagePath": "pages/daily/daily",
+        "text": "动态",
+        "iconPath": "images/tab/tab-daily.png",
+        "selectedIconPath": "images/tab/tab-daily-active.png"
+      }
+    ]
+  },
+  "usingComponents": {
+    "calendar": "/components/calendar/calendar",
+    "sign-pad": "/components/sign-pad/sign-pad",
+    "cached-image": "/components/cached-image/cached-image",
+    "hidden-admin-entry": "/components/hidden-admin-entry/hidden-admin-entry"
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于在地图上选择店铺营业地址"
+    }
+  },
+  "requiredPrivateInfos": [
+    "chooseLocation"
+  ]
+}

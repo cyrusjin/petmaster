@@ -1,0 +1,23 @@
+.welcome-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 40rpx 30rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+}
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; margin-bottom: 20rpx; }
+.stat-card { background: #fff; border-radius: 24rpx; padding: 24rpx; text-align: center; box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05); }
+.stat-num {
+  font-size: 48rpx;
+  font-weight: 700;
+  font-style: italic;
+  color: #000000;
+  display: block;
+  text-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
+}
+.stat-label { font-size: 22rpx; color: #999999; margin-top: 4rpx; display: block; }
+.quick-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16rpx; }
+.quick-item { display: flex; flex-direction: column; align-items: center; padding: 24rpx 0 20rpx; background: #F7F8FA; border-radius: 16rpx; font-size: 24rpx; color: #666666; }
+.quick-icon-img { width: 72rpx; height: 72rpx; margin-bottom: 10rpx; display: block; }
+.boarding-item { display: flex; justify-content: space-between; align-items: center; padding: 20rpx 0; border-bottom: 1rpx solid #E8ECF0; }
+.boarding-item:last-child { border-bottom: none; }

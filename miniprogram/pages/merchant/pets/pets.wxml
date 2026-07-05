@@ -1,0 +1,12 @@
+<view class="container">
+  <view class="search-bar mb-20"><input class="form-input" placeholder="搜索宠物名称..." value="{{keyword}}" bindinput="onSearch" /></view>
+  <view wx:if="{{filtered.length > 0}}">
+    <view class="card" wx:for="{{filtered}}" wx:key="id">
+      <view class="flex-between"><view class="flex-row gap-20"><cached-image wx:if="{{item.photo}}" src="{{item.photo}}" mode="aspectFill" custom-class="pet-avatar-small" /><view wx:else class="pet-avatar-small">{{item.name[0]}}</view><view><text class="boarding-name">{{item.name}}</text><view class="flex-row gap-16 mt-16"><text class="tag tag-blue">{{item.type}}</text><text class="tag tag-green">{{item.gender}}</text></view></view></view><text class="btn-sm btn-blue" bindtap="onEdit" data-id="{{item.id}}">编辑</text></view>
+      <view class="pet-detail-row mt-16" wx:if="{{item.vaccination}}"><text class="text-gray">疫苗：</text><text class="{{item.vaccination==='已接种'?'text-green':'text-red'}}">{{item.vaccination}}</text></view>
+      <view class="pet-detail-row" wx:if="{{item.specialCare}}"><text class="text-gray">特殊需求：</text><text class="tag tag-red">{{item.specialCare}}</text></view>
+    </view>
+  </view>
+  <view wx:else class="empty-state"><text class="empty-icon">🐾</text><text class="empty-text">暂无宠物档案</text></view>
+  <button class="btn-primary mt-20" bindtap="onAdd">添加宠物</button>
+</view>

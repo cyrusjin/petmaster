@@ -1,0 +1,9 @@
+{
+  "name": "userAuth",
+  "version": "1.0.0",
+  "description": "用户身份与权限校验",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.4.0"
+  }
+}

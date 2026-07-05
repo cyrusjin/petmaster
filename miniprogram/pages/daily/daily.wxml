@@ -1,0 +1,48 @@
+<view class="container">
+  <view wx:if="{{logs.length > 0}}">
+    <view class="daily-item card" wx:for="{{logs}}" wx:key="id" wx:for-index="logIdx">
+      <view class="flex-between mb-16">
+        <view class="flex-row gap-16">
+          <cached-image wx:if="{{item.petPhoto}}" src="{{item.petPhoto}}" mode="aspectFill" custom-class="pet-avatar-small" />
+          <view wx:else class="pet-avatar-small">{{item.petName[0]}}</view>
+          <view>
+            <text class="boarding-name">{{item.petName}}</text>
+            <text class="tag tag-orange new-tag" wx:if="{{item.isNew}}">新</text>
+          </view>
+        </view>
+        <text class="text-gray daily-time">{{item.time}}</text>
+      </view>
+      <view class="daily-checks">
+        <text class="tag tag-green" wx:for="{{item.checks}}" wx:key="*this" wx:for-item="c">{{c}}</text>
+      </view>
+      <view class="daily-desc" wx:if="{{item.description}}">{{item.description}}</view>
+      <view class="daily-media" wx:if="{{(item.images && item.images.length) || item.videoUrl || item.video}}">
+        <view
+          class="daily-img-wrap"
+          wx:for="{{item.images}}"
+          wx:key="*this"
+          wx:for-item="img"
+          catchtap="onPreviewImage"
+          data-log-index="{{logIdx}}"
+          data-url="{{img}}"
+        >
+          <cached-image src="{{img}}" mode="aspectFill" custom-class="daily-img" />
+        </view>
+        <view
+          wx:if="{{item.videoUrl || item.video}}"
+          class="daily-video-thumb"
+          catchtap="onPreviewVideo"
+          data-log-index="{{logIdx}}"
+        >
+          <text class="video-play-icon">▶</text>
+        </view>
+      </view>
+      <text wx:if="{{item.notifyOwner || item.isAbnormal}}" class="tag tag-orange" style="margin-top:12rpx;">已标记通知主人</text>
+    </view>
+  </view>
+  <view wx:else class="empty-state">
+    <text class="empty-icon">📸</text>
+    <text class="empty-text">暂无宠物动态</text>
+  </view>
+</view>
+<hidden-admin-entry id="hiddenAdminEntry" />

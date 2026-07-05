@@ -1,0 +1,2 @@
+.search-bar { padding: 0; }
+.pet-detail-row { display: flex; align-items: center; padding-top: 12rpx; font-size: 24rpx; color: #333333; }

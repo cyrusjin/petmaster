@@ -1,0 +1,46 @@
+<view class="container">
+  <view class="welcome-card">
+    <view class="flex-between">
+      <view><text style="color:#000;font-size:36rpx;font-weight:700;display:block;">商家管理后台</text><text style="color:#666;font-size:24rpx;">{{shop.name || '宠物寄养服务中心'}}</text></view>
+      <view class="tag tag-green" bindtap="onToggleStatus">{{shop.status || '正常接单'}}</view>
+    </view>
+  </view>
+  <view class="stats-grid">
+    <view class="stat-card"><text class="stat-num">{{stats.todayRevenue}}</text><text class="stat-label">今日营收</text></view>
+    <view class="stat-card"><text class="stat-num">{{stats.boardingCount}}</text><text class="stat-label">寄养中</text></view>
+    <view class="stat-card"><text class="stat-num">{{stats.totalOrders}}</text><text class="stat-label">总订单</text></view>
+    <view class="stat-card"><text class="stat-num">{{stats.newOrders}}</text><text class="stat-label">待处理</text></view>
+  </view>
+  <view class="card">
+    <view class="card-title">快捷操作</view>
+    <view class="quick-grid">
+      <view class="quick-item" bindtap="onGoOrders">
+        <image class="quick-icon-img" src="/images/card/card-orders.png" mode="aspectFit" />
+        <text>订单管理</text>
+      </view>
+      <view class="quick-item" bindtap="onGoDailyCheck">
+        <image class="quick-icon-img" src="/images/card/card-check.png" mode="aspectFit" />
+        <text>日常打卡</text>
+      </view>
+      <view class="quick-item" bindtap="onGoStatistics">
+        <image class="quick-icon-img" src="/images/card/card-stats.png" mode="aspectFit" />
+        <text>营收统计</text>
+      </view>
+      <view class="quick-item" bindtap="onGoPets">
+        <image class="quick-icon-img" src="/images/card/card-pets.png" mode="aspectFit" />
+        <text>宠物管理</text>
+      </view>
+      <view class="quick-item" bindtap="onGoSettings">
+        <image class="quick-icon-img" src="/images/card/card-settings.png" mode="aspectFit" />
+        <text>店铺设置</text>
+      </view>
+    </view>
+  </view>
+  <view class="card" wx:if="{{boardingList.length > 0}}">
+    <view class="card-title">在住宠物 ({{boardingList.length}})</view>
+    <view class="boarding-item" wx:for="{{boardingList}}" wx:key="id" bindtap="onGoDetail" data-id="{{item.id}}">
+      <view class="flex-row gap-20"><cached-image wx:if="{{item.petPhoto}}" src="{{item.petPhoto}}" mode="aspectFill" custom-class="pet-avatar-small" /><view wx:else class="pet-avatar-small">{{item.petName[0]}}</view><view><text class="boarding-name">{{item.petName}}</text><text class="text-gray" style="display:block;font-size:22rpx;">到期：{{item.endDate}}</text></view></view>
+      <text class="text-red" wx:if="{{item.expiring}}">即将到期</text>
+    </view>
+  </view>
+</view>
