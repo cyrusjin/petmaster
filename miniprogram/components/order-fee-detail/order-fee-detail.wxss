@@ -52,7 +52,7 @@
 .fee-total-row {
   padding-top: 12rpx;
   margin-top: 12rpx;
-  border-top: 1rpx solid #E8ECF0;
+  border-top: 1rpx solid #F2DEC9;
   font-size: 28rpx;
 }
 
@@ -82,11 +82,11 @@
 .fee-grand-total {
   margin-top: 20rpx;
   padding-top: 16rpx;
-  border-top: 1rpx solid #E8ECF0;
+  border-top: 1rpx solid #F2DEC9;
   font-size: 30rpx;
   font-weight: 600;
 }
 
 .copyable-fee {
-  color: #1D3D7A;
+  color: #E98657;
 }

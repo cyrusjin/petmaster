@@ -27,7 +27,7 @@
   text-align: center;
   font-size: 32rpx;
   font-weight: 700;
-  color: #1D3D7A;
+  color: #E98657;
   margin-bottom: 12rpx;
 }
 
@@ -45,7 +45,7 @@
   padding: 0 24rpx;
   box-sizing: border-box;
   background: #F7F8FA;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 16rpx;
   font-size: 28rpx;
   color: #333333;
@@ -77,6 +77,6 @@
 }
 
 .admin-pwd-btn.confirm {
-  background: #1D3D7A;
+  background: #E98657;
   color: #ffffff;
 }

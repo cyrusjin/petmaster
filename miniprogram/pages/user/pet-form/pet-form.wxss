@@ -1,20 +1,20 @@
 .page-root { min-height: 100%; }
 .upload-row { display: flex; }
-.upload-preview { width: 160rpx; height: 160rpx; border-radius: 16rpx; border: 3rpx solid #E8ECF0; }
-.upload-btn { width: 160rpx; height: 160rpx; border-radius: 16rpx; background: #F7F8FA; border: 2rpx dashed #D0D8E8; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #2B5AA0; font-size: 48rpx; }
+.upload-preview { width: 160rpx; height: 160rpx; border-radius: 16rpx; border: 3rpx solid #F2DEC9; }
+.upload-btn { width: 160rpx; height: 160rpx; border-radius: 16rpx; background: #F7F8FA; border: 2rpx dashed #F2DEC9; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #F7AA78; font-size: 48rpx; }
 .pet-type-group { display: flex; flex-wrap: wrap; gap: 16rpx; }
 .pet-type-item {
   padding: 16rpx 28rpx;
   font-size: 26rpx;
   color: #333333;
   background: #fff;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 16rpx;
 }
 .pet-type-item.active {
-  color: #1D3D7A;
-  background: #F2F4FF;
-  border-color: #1D3D7A;
+  color: #E98657;
+  background: #FFF1E7;
+  border-color: #E98657;
   font-weight: 600;
 }
 .date-picker-trigger {
@@ -46,7 +46,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 24rpx 32rpx;
-  border-bottom: 2rpx solid #E8ECF0;
+  border-bottom: 2rpx solid #F2DEC9;
 }
 .date-picker-title {
   font-size: 30rpx;
@@ -59,7 +59,7 @@
   padding: 8rpx 12rpx;
 }
 .date-picker-confirm {
-  color: #1D3D7A;
+  color: #E98657;
   font-weight: 600;
 }
 .date-picker-wheel {

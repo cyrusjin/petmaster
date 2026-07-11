@@ -704,7 +704,7 @@ Page({
     wx.showModal({
       title: '确认切换营业状态',
       content: getStatusConfirmContent(nextStatus),
-      confirmColor: '#1D3D7A',
+      confirmColor: '#E98657',
       success: (res) => {
         if (res.confirm) {
           this._markDirty();

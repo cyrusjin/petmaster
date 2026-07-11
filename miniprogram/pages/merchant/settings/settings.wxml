@@ -24,14 +24,14 @@
     <view class="card-title">收费模式</view>
     <radio-group class="billing-mode-group" bindchange="onBillingMode">
       <label class="billing-mode-item {{billingMode === 'weight' ? 'mode-active' : ''}}">
-        <radio value="weight" checked="{{billingMode === 'weight'}}" color="#1D3D7A" />
+        <radio value="weight" checked="{{billingMode === 'weight'}}" color="#E98657" />
         <view class="mode-info">
           <text class="mode-title">按宠物体重区间收费</text>
           <text class="mode-desc">根据宠物体重自动匹配价格区间</text>
         </view>
       </label>
       <label class="billing-mode-item {{billingMode === 'room' ? 'mode-active' : ''}}">
-        <radio value="room" checked="{{billingMode === 'room'}}" color="#1D3D7A" />
+        <radio value="room" checked="{{billingMode === 'room'}}" color="#E98657" />
         <view class="mode-info">
           <text class="mode-title">按房间类型收费</text>
           <text class="mode-desc">宠物主人选择大/中/小房间</text>

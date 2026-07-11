@@ -5,8 +5,8 @@
 }
 
 .demo-banner {
-  background: #F2F4FF;
-  border: 1rpx solid #C5CEE0;
+  background: #FFF1E7;
+  border: 1rpx solid #F2C39E;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
   margin-bottom: 20rpx;
@@ -34,13 +34,13 @@
   border-radius: 12rpx;
 }
 .period-tab.active {
-  background: #1D3D7A;
+  background: #E98657;
   color: #FFFFFF;
   font-weight: 600;
 }
 
 .revenue-hero {
-  background: linear-gradient(135deg, #1D3D7A 0%, #2B5AA0 100%);
+  background: linear-gradient(135deg, #E98657 0%, #F7AA78 100%);
   border-radius: 24rpx;
   padding: 32rpx 28rpx 28rpx;
   margin-bottom: 20rpx;
@@ -118,7 +118,7 @@
 .kpi-value {
   font-size: 34rpx;
   font-weight: 700;
-  color: #1D3D7A;
+  color: #E98657;
   line-height: 1.2;
 }
 .kpi-label {
@@ -146,7 +146,7 @@
 }
 .card-link {
   font-size: 24rpx;
-  color: #1D3D7A;
+  color: #E98657;
 }
 
 .composition-empty {
@@ -171,12 +171,12 @@
   color: #333333;
 }
 .composition-amount {
-  color: #1D3D7A;
+  color: #E98657;
   font-weight: 600;
 }
 .composition-bar {
   height: 16rpx;
-  background: #E8ECF0;
+  background: #F2DEC9;
   border-radius: 8rpx;
   overflow: hidden;
 }
@@ -186,10 +186,10 @@
   min-width: 4rpx;
 }
 .composition-fill.boarding {
-  background: #1D3D7A;
+  background: #E98657;
 }
 .composition-fill.shipping {
-  background: #2B5AA0;
+  background: #F7AA78;
 }
 
 .status-grid {
@@ -216,7 +216,7 @@
   color: #999999;
 }
 .status-chip.pending .status-num { color: #F57C00; }
-.status-chip.boarding .status-num { color: #1D3D7A; }
+.status-chip.boarding .status-num { color: #E98657; }
 .status-chip.completed .status-num { color: #2E7D32; }
 .status-chip.cancelled .status-num { color: #999999; }
 
@@ -230,7 +230,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #E8ECF0;
+  border-bottom: 1rpx solid #F2DEC9;
   gap: 16rpx;
 }
 .recent-item:last-child {
@@ -262,7 +262,7 @@
   display: block;
   font-size: 28rpx;
   font-weight: 700;
-  color: #1D3D7A;
+  color: #E98657;
 }
 .recent-status {
   display: block;
@@ -270,7 +270,7 @@
   font-size: 20rpx;
 }
 .recent-status.status-pending { color: #F57C00; }
-.recent-status.status-boarding { color: #1D3D7A; }
+.recent-status.status-boarding { color: #E98657; }
 .recent-status.status-completed { color: #2E7D32; }
 .recent-status.status-cancelled { color: #999999; }
 

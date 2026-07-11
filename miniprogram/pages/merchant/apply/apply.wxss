@@ -4,8 +4,8 @@
 
 .apply-pending-card {
   margin-bottom: 24rpx;
-  background: #F2F4FF;
-  border: 1rpx solid #C5CEE0;
+  background: #FFF1E7;
+  border: 1rpx solid #F2C39E;
 }
 
 .apply-tip {

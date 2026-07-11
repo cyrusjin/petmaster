@@ -36,18 +36,18 @@
   ],
   "window": {
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#1D3D7A",
+    "navigationBarBackgroundColor": "#FFF4E7",
     "navigationBarTitleText": "宠物寄养",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#F7F8FA",
-    "backgroundColorTop": "#1D3D7A",
-    "backgroundColorBottom": "#F7F8FA"
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#FFF8F0",
+    "backgroundColorTop": "#FFF4E7",
+    "backgroundColorBottom": "#FFFDF9"
   },
   "tabBar": {
     "custom": true,
     "color": "#999999",
-    "selectedColor": "#1D3D7A",
-    "backgroundColor": "#ffffff",
+    "selectedColor": "#E98657",
+    "backgroundColor": "#FFFDF8",
     "borderStyle": "black",
     "list": [
       {

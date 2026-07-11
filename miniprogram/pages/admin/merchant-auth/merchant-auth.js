@@ -72,7 +72,7 @@ Page({
     wx.showModal({
       title: '确认开通',
       content: '确定同意该商家入驻并开通商家端权限？',
-      confirmColor: '#1D3D7A',
+      confirmColor: '#E98657',
       success: (r) => {
         if (!r.confirm) return;
         this._review(storeId, 'approve');

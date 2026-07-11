@@ -71,11 +71,11 @@
   line-height: 88rpx;
   margin: 0;
   padding: 0 24rpx;
-  background: #F2F4FF;
-  color: #1D3D7A;
+  background: #FFF1E7;
+  color: #E98657;
   font-size: 28rpx;
   font-weight: 600;
-  border: 2rpx solid #C5CEE0;
+  border: 2rpx solid #F2C39E;
   border-radius: 16rpx;
   text-align: center;
   box-sizing: border-box;
@@ -109,7 +109,7 @@
 }
 
 .auth-btn-primary {
-  background: #1D3D7A;
+  background: #E98657;
   color: #FFFFFF;
   font-weight: 600;
 }

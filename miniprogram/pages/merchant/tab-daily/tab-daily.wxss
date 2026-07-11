@@ -1,8 +1,8 @@
 @import '../../../styles/merchant-tab.wxss';
 
 .demo-banner {
-  background: #F2F4FF;
-  border: 1rpx solid #C5CEE0;
+  background: #FFF1E7;
+  border: 1rpx solid #F2C39E;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
   margin-bottom: 20rpx;
@@ -72,7 +72,7 @@
   border: none;
 }
 .quick-icon-img { width: 72rpx; height: 72rpx; margin-bottom: 10rpx; display: block; }
-.boarding-item { display: flex; justify-content: space-between; align-items: center; padding: 20rpx 0; border-bottom: 1rpx solid #E8ECF0; gap: 16rpx; }
+.boarding-item { display: flex; justify-content: space-between; align-items: center; padding: 20rpx 0; border-bottom: 1rpx solid #F2DEC9; gap: 16rpx; }
 .boarding-item:last-child { border-bottom: none; }
 .boarding-main { display: flex; align-items: center; gap: 20rpx; flex: 1; min-width: 0; }
 .boarding-info { min-width: 0; }
@@ -80,7 +80,7 @@
 .boarding-date { display: block; font-size: 22rpx; margin-top: 4rpx; }
 .boarding-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10rpx; flex-shrink: 0; }
 .check-count { font-size: 22rpx; color: #666666; white-space: nowrap; }
-.go-check-btn { margin: 0; padding: 0 28rpx; height: 56rpx; line-height: 56rpx; font-size: 24rpx; color: #fff; background: #1D3D7A; border-radius: 28rpx; border: none; }
+.go-check-btn { margin: 0; padding: 0 28rpx; height: 56rpx; line-height: 56rpx; font-size: 24rpx; color: #fff; background: #E98657; border-radius: 28rpx; border: none; }
 .go-check-btn::after { border: none; }
 .expiring-tag { font-size: 20rpx; color: #E53935; background: #FFEBEE; padding: 2rpx 10rpx; border-radius: 8rpx; }
 
@@ -119,8 +119,8 @@
 }
 .share-staff-badge {
   font-size: 22rpx;
-  color: #1D3D7A;
-  background: #F2F4FF;
+  color: #E98657;
+  background: #FFF1E7;
   padding: 4rpx 14rpx;
   border-radius: 999rpx;
   flex-shrink: 0;

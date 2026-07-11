@@ -833,7 +833,7 @@ Page({
           title: '预约成功',
           content: `已为${selectedPet.name}向「${store.name}」提交寄养预约！\n时间：${startDate} ${startTime} 至 ${endDate} ${endTime}\n费用：¥${finalTotalFee}\n\n寄养协议已电子签署。`,
           showCancel: false,
-          confirmColor: '#1D3D7A',
+          confirmColor: '#E98657',
           success: () => wx.switchTab({ url: '/pages/orders/orders' })
         });
       })

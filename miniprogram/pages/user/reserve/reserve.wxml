@@ -58,7 +58,7 @@
         <view class="pickup-inline" wx:if="{{store.hasPickup}}">
           <view class="pickup-inline-head">
             <text class="pickup-inline-title">接送服务</text>
-            <switch checked="{{needPickup}}" bindchange="onPickupChange" color="#1D3D7A" />
+            <switch checked="{{needPickup}}" bindchange="onPickupChange" color="#E98657" />
           </view>
           <view class="pickup-notice-box pickup-notice-inline" wx:if="{{needPickup && (store.pickupNotice || pickupPricingSummary)}}">
             <text class="pickup-notice-title" wx:if="{{store.pickupNotice}}">接送须知</text>
@@ -70,13 +70,13 @@
               <text class="form-label">接送范围 <text class="required-star">*</text></text>
               <radio-group class="pickup-leg-group" bindchange="onPickupLegChange">
                 <label class="pickup-leg-item">
-                  <radio value="both" checked="{{pickupLeg === 'both'}}" color="#1D3D7A" />去程+返程
+                  <radio value="both" checked="{{pickupLeg === 'both'}}" color="#E98657" />去程+返程
                 </label>
                 <label class="pickup-leg-item">
-                  <radio value="outbound" checked="{{pickupLeg === 'outbound'}}" color="#1D3D7A" />仅去程
+                  <radio value="outbound" checked="{{pickupLeg === 'outbound'}}" color="#E98657" />仅去程
                 </label>
                 <label class="pickup-leg-item">
-                  <radio value="return" checked="{{pickupLeg === 'return'}}" color="#1D3D7A" />仅返程
+                  <radio value="return" checked="{{pickupLeg === 'return'}}" color="#E98657" />仅返程
                 </label>
               </radio-group>
             </view>

@@ -29,7 +29,7 @@
   align-items: center;
   gap: 20rpx;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #E8ECF0;
+  border-bottom: 1rpx solid #F2DEC9;
 }
 .staff-item:last-child {
   border-bottom: none;
@@ -40,8 +40,8 @@
   line-height: 72rpx;
   text-align: center;
   border-radius: 50%;
-  background: #F2F4FF;
-  color: #1D3D7A;
+  background: #FFF1E7;
+  color: #E98657;
   font-size: 28rpx;
   font-weight: 600;
   flex-shrink: 0;

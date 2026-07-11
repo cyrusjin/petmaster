@@ -4,8 +4,8 @@ import { join } from 'path';
 
 const OUT = process.argv[2] || join(process.cwd(), 'miniprogram/images/card');
 const SIZE = 96;
-const BG = '#F2F4FF';
-const NAVY = '#1D3D7A';
+const BG = '#FFF1E7';
+const NAVY = '#E98657';
 const STROKE = 2.8;
 
 mkdirSync(OUT, { recursive: true });

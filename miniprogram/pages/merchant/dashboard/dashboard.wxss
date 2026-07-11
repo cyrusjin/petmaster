@@ -19,5 +19,5 @@
 .quick-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16rpx; }
 .quick-item { display: flex; flex-direction: column; align-items: center; padding: 24rpx 0 20rpx; background: #F7F8FA; border-radius: 16rpx; font-size: 24rpx; color: #666666; }
 .quick-icon-img { width: 72rpx; height: 72rpx; margin-bottom: 10rpx; display: block; }
-.boarding-item { display: flex; justify-content: space-between; align-items: center; padding: 20rpx 0; border-bottom: 1rpx solid #E8ECF0; }
+.boarding-item { display: flex; justify-content: space-between; align-items: center; padding: 20rpx 0; border-bottom: 1rpx solid #F2DEC9; }
 .boarding-item:last-child { border-bottom: none; }

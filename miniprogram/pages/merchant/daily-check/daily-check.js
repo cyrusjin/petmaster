@@ -271,7 +271,7 @@ Page({
         title: '提示',
         content: '请至少选择一项打卡项目',
         showCancel: false,
-        confirmColor: '#1D3D7A'
+        confirmColor: '#E98657'
       });
       return;
     }

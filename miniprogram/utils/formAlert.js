@@ -3,7 +3,7 @@ function showValidationAlert(message, title = '请完善信息') {
     title,
     content: message,
     showCancel: false,
-    confirmColor: '#1D3D7A'
+    confirmColor: '#E98657'
   });
 }
 

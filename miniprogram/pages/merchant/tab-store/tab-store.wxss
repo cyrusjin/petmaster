@@ -4,8 +4,8 @@
 .incomplete-tip {
   margin-bottom: 20rpx;
   padding: 20rpx 24rpx;
-  background: #F2F4FF;
-  border: 1rpx solid #C5CEE0;
+  background: #FFF1E7;
+  border: 1rpx solid #F2C39E;
   border-radius: 16rpx;
 }
 .incomplete-tip-text {
@@ -16,8 +16,8 @@
 
 .apply-pending-card {
   margin-bottom: 24rpx;
-  background: #F2F4FF;
-  border: 1rpx solid #C5CEE0;
+  background: #FFF1E7;
+  border: 1rpx solid #F2C39E;
 }
 
 .apply-tip {
@@ -35,7 +35,7 @@
   gap: 16rpx;
   padding: 24rpx;
   background: #F7F8FA;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 16rpx;
 }
 .address-content { flex: 1; min-width: 0; }
@@ -57,9 +57,9 @@
   flex-shrink: 0;
   padding: 12rpx 24rpx;
   font-size: 24rpx;
-  color: #1D3D7A;
-  background: #F2F4FF;
-  border: 2rpx solid #1D3D7A;
+  color: #E98657;
+  background: #FFF1E7;
+  border: 2rpx solid #E98657;
   border-radius: 999rpx;
   line-height: 1.4;
 }
@@ -82,15 +82,15 @@
   gap: 8rpx;
   padding: 20rpx 0;
   border-radius: 16rpx;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   background: #fff;
   font-size: 28rpx;
   color: #333333;
 }
 .day-charge-item.mode-active {
-  background: #F2F4FF;
-  border-color: #1D3D7A;
-  color: #1D3D7A;
+  background: #FFF1E7;
+  border-color: #E98657;
+  color: #E98657;
   font-weight: 600;
 }
 .time-picker-row {
@@ -99,7 +99,7 @@
   justify-content: space-between;
   gap: 20rpx;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #E8ECF0;
+  border-bottom: 1rpx solid #F2DEC9;
 }
 .time-picker-row:last-of-type { border-bottom: none; }
 .time-picker-label { flex: 1; min-width: 0; }
@@ -122,9 +122,9 @@
   text-align: center;
   font-size: 30rpx;
   font-weight: 600;
-  color: #1D3D7A;
+  color: #E98657;
   background: #fff;
-  border: 2rpx solid #1D3D7A;
+  border: 2rpx solid #E98657;
   border-radius: 12rpx;
 }
 .charge-summary {
@@ -133,7 +133,7 @@
   font-size: 24rpx;
   line-height: 1.6;
   color: #666666;
-  background: #F2F4FF;
+  background: #FFF1E7;
   border-radius: 12rpx;
 }
 .pickup-notice-group { margin-top: 20rpx; margin-bottom: 0; }
@@ -148,7 +148,7 @@
   gap: 16rpx;
   margin-bottom: 24rpx;
   padding-left: 16rpx;
-  border-left: 6rpx solid #1D3D7A;
+  border-left: 6rpx solid #E98657;
 }
 .store-info-title {
   font-size: 32rpx;
@@ -167,7 +167,7 @@
 .store-status-badge.incomplete {
   color: #999999;
   background: #F0F2F5;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
 }
 .business-status-group {
   display: flex;
@@ -182,7 +182,7 @@
   font-size: 22rpx;
   color: #666666;
   background: #F7F8FA;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 999rpx;
 }
 .business-status-item.active.open {
@@ -211,14 +211,14 @@
   font-size: 24rpx;
   color: #666666;
   background: #fff;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 999rpx;
   box-sizing: border-box;
 }
 .weekday-chip.active {
-  color: #1D3D7A;
-  background: #F2F4FF;
-  border-color: #1D3D7A;
+  color: #E98657;
+  background: #FFF1E7;
+  border-color: #E98657;
   font-weight: 600;
 }
 .business-time-row {
@@ -254,13 +254,13 @@
   font-size: 26rpx;
   color: #333333;
   background: #fff;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 16rpx;
 }
 .reception-range-item.active {
-  color: #1D3D7A;
-  background: #F2F4FF;
-  border-color: #1D3D7A;
+  color: #E98657;
+  background: #FFF1E7;
+  border-color: #E98657;
   font-weight: 600;
 }
 .reception-range-summary {
@@ -290,7 +290,7 @@
   width: 200rpx;
   height: 200rpx;
   border-radius: 16rpx;
-  background: #E8ECF0;
+  background: #F2DEC9;
 }
 .store-photo-delete {
   position: absolute;
@@ -313,10 +313,10 @@
   align-items: center;
   justify-content: center;
   gap: 8rpx;
-  border: 2rpx dashed #1D3D7A;
+  border: 2rpx dashed #E98657;
   border-radius: 16rpx;
   background: #F7F8FA;
-  color: #1D3D7A;
+  color: #E98657;
 }
 .store-photo-add-icon {
   font-size: 56rpx;
@@ -347,7 +347,7 @@
   width: 88rpx;
   height: 88rpx;
   border-radius: 16rpx;
-  background: #E8ECF0;
+  background: #F2DEC9;
   flex-shrink: 0;
 }
 .share-preview-info { flex: 1; min-width: 0; }
@@ -368,7 +368,7 @@
   height: 80rpx;
   line-height: 80rpx;
   border-radius: 40rpx;
-  background: #1D3D7A;
+  background: #E98657;
   color: #fff;
   font-size: 28rpx;
   font-weight: 600;
@@ -378,7 +378,7 @@
 }
 .btn-share::after { border: none; }
 .btn-share-disabled {
-  background: #E8ECF0;
+  background: #F2DEC9;
   color: #999999;
 }
 .share-hint {
@@ -398,13 +398,13 @@
 .contract-info { flex: 1; }
 .contract-title { font-size: 28rpx; font-weight: 600; color: #333333; display: block; }
 .contract-desc { font-size: 22rpx; color: #999999; display: block; margin-top: 4rpx; }
-.contract-link { font-size: 24rpx; color: #1D3D7A; flex-shrink: 0; }
+.contract-link { font-size: 24rpx; color: #E98657; flex-shrink: 0; }
 .contract-sign-row { margin-top: 24rpx; text-align: center; }
 .btn-contract-sign {
   width: 100%;
   height: 80rpx;
   line-height: 80rpx;
-  background: #1D3D7A;
+  background: #E98657;
   color: #fff;
   font-size: 28rpx;
   font-weight: 600;
@@ -424,7 +424,7 @@
   gap: 16rpx;
   margin-top: 20rpx;
   padding: 20rpx;
-  background: #F2F4FF;
+  background: #FFF1E7;
   border-radius: 16rpx;
 }
 .contract-signed-icon {
@@ -433,16 +433,16 @@
   line-height: 48rpx;
   text-align: center;
   border-radius: 50%;
-  background: #1D3D7A;
+  background: #E98657;
   color: #fff;
   font-size: 28rpx;
   flex-shrink: 0;
 }
 .contract-signed-info { flex: 1; min-width: 0; }
-.contract-signed-title { display: block; font-size: 26rpx; font-weight: 600; color: #1D3D7A; }
+.contract-signed-title { display: block; font-size: 26rpx; font-weight: 600; color: #E98657; }
 .contract-signed-time { display: block; font-size: 22rpx; color: #999999; margin-top: 4rpx; }
-.contract-resign { font-size: 24rpx; color: #1D3D7A; flex-shrink: 0; }
-.btn-disabled { background: #E8ECF0 !important; opacity: 0.8; }
+.contract-resign { font-size: 24rpx; color: #E98657; flex-shrink: 0; }
+.btn-disabled { background: #F2DEC9 !important; opacity: 0.8; }
 
 .contract-clause-tip {
   display: block;
@@ -461,8 +461,8 @@
 }
 .contract-custom-badge {
   font-size: 22rpx;
-  color: #1D3D7A;
-  background: #F2F4FF;
+  color: #E98657;
+  background: #FFF1E7;
   padding: 4rpx 14rpx;
   border-radius: 999rpx;
   flex-shrink: 0;
@@ -501,7 +501,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 28rpx 32rpx 20rpx;
-  border-bottom: 1rpx solid #E8ECF0;
+  border-bottom: 1rpx solid #F2DEC9;
   flex-shrink: 0;
 }
 .clause-modal-title {
@@ -539,7 +539,7 @@
   display: flex;
   gap: 16rpx;
   padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
-  border-top: 1rpx solid #E8ECF0;
+  border-top: 1rpx solid #F2DEC9;
   flex-shrink: 0;
 }
 .clause-btn {
@@ -559,7 +559,7 @@
   color: #666666;
 }
 .clause-btn-primary {
-  background: #1D3D7A;
+  background: #E98657;
   color: #ffffff;
   font-weight: 600;
 }

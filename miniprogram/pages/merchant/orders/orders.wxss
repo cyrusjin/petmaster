@@ -23,7 +23,7 @@
   transform: translateX(-50%);
   width: 48rpx;
   height: 6rpx;
-  background: #1D3D7A;
+  background: #E98657;
   border-radius: 3rpx;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .order-tab.active .tab-badge {
-  background: #1D3D7A;
+  background: #E98657;
   color: #fff;
 }
 
@@ -50,7 +50,7 @@
   align-items: center;
   margin-top: 12rpx;
   padding-top: 12rpx;
-  border-top: 1rpx solid #E8ECF0;
+  border-top: 1rpx solid #F2DEC9;
 }
 
 .order-actions {

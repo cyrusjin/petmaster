@@ -92,11 +92,11 @@
           <text wx:if="{{businessStatus === '未营业'}}" class="store-status-badge incomplete">未营业</text>
           <radio-group wx:else class="business-status-group" bindchange="onBusinessStatusChange">
             <label class="business-status-item {{businessStatus === '营业中' ? 'active open' : ''}}">
-              <radio value="营业中" checked="{{businessStatus === '营业中'}}" color="#1D3D7A" />
+              <radio value="营业中" checked="{{businessStatus === '营业中'}}" color="#E98657" />
               <text>营业中</text>
             </label>
             <label class="business-status-item {{businessStatus === '已闭店' ? 'active closed' : ''}}">
-              <radio value="已闭店" checked="{{businessStatus === '已闭店'}}" color="#1D3D7A" />
+              <radio value="已闭店" checked="{{businessStatus === '已闭店'}}" color="#E98657" />
               <text>已闭店</text>
             </label>
           </radio-group>
@@ -163,7 +163,7 @@
             wx:for="{{receptionRangeOptions}}"
             wx:key="value"
           >
-            <checkbox value="{{item.value}}" checked="{{item.checked}}" color="#1D3D7A" />
+            <checkbox value="{{item.value}}" checked="{{item.checked}}" color="#E98657" />
             <text>{{item.label}}</text>
           </label>
         </checkbox-group>
@@ -188,14 +188,14 @@
       <view class="card-title">收费模式</view>
       <radio-group class="billing-mode-group" bindchange="onBillingMode">
         <label class="billing-mode-item {{billingMode === 'weight' ? 'mode-active' : ''}}">
-          <radio value="weight" checked="{{billingMode === 'weight'}}" color="#1D3D7A" />
+          <radio value="weight" checked="{{billingMode === 'weight'}}" color="#E98657" />
           <view class="mode-info">
             <text class="mode-title">按宠物体重区间收费</text>
             <text class="mode-desc">根据宠物体重自动匹配价格区间</text>
           </view>
         </label>
         <label class="billing-mode-item {{billingMode === 'room' ? 'mode-active' : ''}}">
-          <radio value="room" checked="{{billingMode === 'room'}}" color="#1D3D7A" />
+          <radio value="room" checked="{{billingMode === 'room'}}" color="#E98657" />
           <view class="mode-info">
             <text class="mode-title">按房间类型收费</text>
             <text class="mode-desc">宠物主人按房间名称与体重限制选择</text>
@@ -253,15 +253,15 @@
         <view class="section-title">入住当天收费原则</view>
         <radio-group class="day-charge-group" bindchange="onCheckInDayCharge">
           <label class="day-charge-item {{checkInDayCharge === 'full' ? 'mode-active' : ''}}">
-            <radio value="full" checked="{{checkInDayCharge === 'full'}}" color="#1D3D7A" />
+            <radio value="full" checked="{{checkInDayCharge === 'full'}}" color="#E98657" />
             <text>全价</text>
           </label>
           <label class="day-charge-item {{checkInDayCharge === 'half' ? 'mode-active' : ''}}">
-            <radio value="half" checked="{{checkInDayCharge === 'half'}}" color="#1D3D7A" />
+            <radio value="half" checked="{{checkInDayCharge === 'half'}}" color="#E98657" />
             <text>半价</text>
           </label>
           <label class="day-charge-item {{checkInDayCharge === 'free' ? 'mode-active' : ''}}">
-            <radio value="free" checked="{{checkInDayCharge === 'free'}}" color="#1D3D7A" />
+            <radio value="free" checked="{{checkInDayCharge === 'free'}}" color="#E98657" />
             <text>免费</text>
           </label>
         </radio-group>
@@ -271,15 +271,15 @@
         <view class="section-title">离店当天收费</view>
         <radio-group class="day-charge-group" bindchange="onDepartureDayCharge">
           <label class="day-charge-item {{departureDayCharge === 'full' ? 'mode-active' : ''}}">
-            <radio value="full" checked="{{departureDayCharge === 'full'}}" color="#1D3D7A" />
+            <radio value="full" checked="{{departureDayCharge === 'full'}}" color="#E98657" />
             <text>全价</text>
           </label>
           <label class="day-charge-item {{departureDayCharge === 'free' ? 'mode-active' : ''}}">
-            <radio value="free" checked="{{departureDayCharge === 'free'}}" color="#1D3D7A" />
+            <radio value="free" checked="{{departureDayCharge === 'free'}}" color="#E98657" />
             <text>免费</text>
           </label>
           <label class="day-charge-item {{departureDayCharge === 'half' ? 'mode-active' : ''}}">
-            <radio value="half" checked="{{departureDayCharge === 'half'}}" color="#1D3D7A" />
+            <radio value="half" checked="{{departureDayCharge === 'half'}}" color="#E98657" />
             <text>时间段</text>
           </label>
         </radio-group>
@@ -322,11 +322,11 @@
       <view class="card-title">接送设置</view>
       <radio-group class="day-charge-group" bindchange="onPickupServiceChange">
         <label class="day-charge-item {{shop.pickupService === 'yes' ? 'mode-active' : ''}}">
-          <radio value="yes" checked="{{shop.pickupService === 'yes'}}" color="#1D3D7A" />
+          <radio value="yes" checked="{{shop.pickupService === 'yes'}}" color="#E98657" />
           <text>有接送</text>
         </label>
         <label class="day-charge-item {{shop.pickupService !== 'yes' ? 'mode-active' : ''}}">
-          <radio value="no" checked="{{shop.pickupService !== 'yes'}}" color="#1D3D7A" />
+          <radio value="no" checked="{{shop.pickupService !== 'yes'}}" color="#E98657" />
           <text>无接送</text>
         </label>
       </radio-group>
@@ -335,11 +335,11 @@
           <text class="form-label">收费方式 <text class="required-star">*</text></text>
           <radio-group class="day-charge-group" bindchange="onPickupPricingModeChange">
             <label class="day-charge-item {{shop.pickupPricingMode !== 'distance' ? 'mode-active' : ''}}">
-              <radio value="flat" checked="{{shop.pickupPricingMode !== 'distance'}}" color="#1D3D7A" />
+              <radio value="flat" checked="{{shop.pickupPricingMode !== 'distance'}}" color="#E98657" />
               <text>一口价（单程）</text>
             </label>
             <label class="day-charge-item {{shop.pickupPricingMode === 'distance' ? 'mode-active' : ''}}">
-              <radio value="distance" checked="{{shop.pickupPricingMode === 'distance'}}" color="#1D3D7A" />
+              <radio value="distance" checked="{{shop.pickupPricingMode === 'distance'}}" color="#E98657" />
               <text>按距离收费</text>
             </label>
           </radio-group>

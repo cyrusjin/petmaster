@@ -10,7 +10,7 @@ const OUT = process.argv[2] || join(process.cwd(), 'miniprogram/images/tab');
 const SIZE = 81;
 const STROKE = 2.6;
 const GRAY = '#999999';
-const NAVY = '#1D3D7A';
+const NAVY = '#E98657';
 
 mkdirSync(OUT, { recursive: true });
 

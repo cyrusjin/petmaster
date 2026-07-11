@@ -1,5 +1,5 @@
 .summary-card {
-  background: #1D3D7A;
+  background: #E98657;
   border-radius: 24rpx;
   padding: 32rpx;
   margin-bottom: 20rpx;
@@ -48,7 +48,7 @@
   margin-bottom: 16rpx;
   font-size: 26rpx;
   font-weight: 600;
-  color: #1D3D7A;
+  color: #E98657;
 }
 
 .pickup-detail-row {
@@ -102,7 +102,7 @@
   padding: 14rpx 0;
   font-size: 26rpx;
   color: #333333;
-  border-bottom: 1rpx solid #F2F4FF;
+  border-bottom: 1rpx solid #FFF1E7;
 }
 
 .detail-row:last-child {

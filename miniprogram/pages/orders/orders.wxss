@@ -1,4 +1,4 @@
-.order-info { display: flex; justify-content: space-between; align-items: center; margin-top: 12rpx; padding-top: 12rpx; border-top: 1rpx solid #E8ECF0; }
+.order-info { display: flex; justify-content: space-between; align-items: center; margin-top: 12rpx; padding-top: 12rpx; border-top: 1rpx solid #F2DEC9; }
 .order-actions { display: flex; justify-content: flex-end; margin-top: 16rpx; gap: 16rpx; align-items: center; }
 .unread-dot { color: #E53935; font-size: 20rpx; margin-right: 6rpx; }
-.unread-hint { font-size: 22rpx; color: #1D3D7A; }
+.unread-hint { font-size: 22rpx; color: #E98657; }

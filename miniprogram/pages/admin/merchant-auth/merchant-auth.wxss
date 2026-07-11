@@ -7,7 +7,7 @@
 .admin-tools-title {
   font-size: 30rpx;
   font-weight: 700;
-  color: #1D3D7A;
+  color: #E98657;
 }
 .admin-tools-desc {
   display: block;
@@ -58,7 +58,7 @@
 .apply-name {
   font-size: 32rpx;
   font-weight: 700;
-  color: #1D3D7A;
+  color: #E98657;
 }
 .apply-status {
   font-size: 22rpx;

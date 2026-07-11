@@ -13,7 +13,7 @@ const PHOTO_GAP = 24;
 const LABEL_COLOR = '#666666';
 const TEXT_COLOR = '#333333';
 const BG_COLOR = '#FFFFFF';
-const BORDER_COLOR = '#E8ECF0';
+const BORDER_COLOR = '#F2DEC9';
 
 function wrapText(ctx, text, maxWidth) {
   const content = text == null || text === '' ? '--' : String(text);

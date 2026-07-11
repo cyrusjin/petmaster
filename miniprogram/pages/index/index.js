@@ -8,7 +8,9 @@ Page({
   data: {
     userInfo: {},
     currentStore: null,
-    boardingPets: []
+    boardingPets: [],
+    petsCount: 0,
+    primaryPet: null
   },
 
   _syncUserTabBar(index) {
@@ -114,7 +116,13 @@ Page({
         const pet = pets.find((p) => p.id === o.petId);
         return { ...o, petPhoto: pet ? pet.photo : '' };
       });
-    this.setData({ userInfo, currentStore, boardingPets: orders });
+    this.setData({
+      userInfo,
+      currentStore,
+      boardingPets: orders,
+      petsCount: pets.length,
+      primaryPet: pets[0] || null
+    });
     this._syncNavTitle(currentStore);
   },
 
@@ -137,7 +145,13 @@ Page({
             const pet = pets.find((p) => p.id === o.petId);
             return { ...o, petPhoto: pet ? pet.photo : '' };
           });
-        this.setData({ userInfo, currentStore, boardingPets: orders });
+        this.setData({
+          userInfo,
+          currentStore,
+          boardingPets: orders,
+          petsCount: pets.length,
+          primaryPet: pets[0] || null
+        });
         this._syncNavTitle(currentStore);
       });
   },
@@ -180,6 +194,7 @@ Page({
     wx.navigateTo({ url: '/pages/user/reserve/reserve' });
   },
   onGoPets() { wx.navigateTo({ url: '/pages/user/pets/pets' }); },
+  onGoOrders() { wx.switchTab({ url: '/pages/orders/orders' }); },
   onGoDaily(e) { wx.navigateTo({ url: '/pages/user/pet-daily/pet-daily?id=' + e.currentTarget.dataset.id }); },
 
   onShareAppMessage() {

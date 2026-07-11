@@ -1,85 +1,161 @@
-<view class="container">
-  <view class="welcome-card" wx:if="{{currentStore}}">
-    <swiper
-      wx:if="{{currentStore.storePhotos.length}}"
-      class="store-swiper"
-      indicator-dots
-      indicator-color="rgba(0,0,0,0.2)"
-      indicator-active-color="#1D3D7A"
-      autoplay="{{currentStore.storePhotos.length > 1}}"
-      circular
-      interval="4000"
-    >
-      <swiper-item wx:for="{{currentStore.storePhotos}}" wx:key="*this">
-        <view class="store-swiper-item" bindtap="onPreviewStorePhoto" data-url="{{item}}">
-          <cached-image custom-class="store-swiper-img" src="{{item}}" mode="aspectFill" />
-        </view>
-      </swiper-item>
-    </swiper>
-    <view class="welcome-body">
-      <view class="welcome-row">
-        <cached-image custom-class="welcome-avatar" src="{{currentStore.logo}}" default-src="/images/default-avatar.png" mode="aspectFill" />
-        <view class="welcome-info">
-          <text class="welcome-name">{{currentStore.name}}</text>
-          <text class="welcome-sub">{{currentStore.intro || '欢迎预约宠物寄养'}}</text>
-          <text class="welcome-meta" wx:if="{{currentStore.hours}}">营业时间：{{currentStore.hours}}</text>
-          <text class="welcome-meta" wx:if="{{currentStore.receptionRangeText}}">接待：{{currentStore.receptionRangeText}}</text>
-        </view>
-        <view class="store-status {{currentStore.isOpen ? 'open' : (currentStore.status === '未营业' ? 'inactive' : 'closed')}}">{{currentStore.status}}</view>
+<view class="home-page">
+  <view class="home-header">
+    <view class="greeting">
+      <text class="greeting-title">Hi，{{userInfo.nickName || '小主'}}</text>
+      <text class="greeting-sub">愿每一天都和毛孩子更亲近</text>
+    </view>
+    <view class="header-actions">
+      <button class="header-icon-btn" open-type="share" aria-label="分享店铺">
+        <text class="header-icon-dot"></text>
+        <text class="header-icon">↗</text>
+      </button>
+    </view>
+  </view>
+
+  <view class="pet-hero" bindtap="onGoPets">
+    <view class="pet-hero-copy">
+      <view class="section-heading compact">
+        <text class="section-heading-text">我的宝贝</text>
+        <text class="section-arrow">›</text>
       </view>
-      <view
-        wx:if="{{currentStore.address}}"
-        class="store-address-row {{currentStore.hasLocation ? 'tappable' : ''}}"
-        bindtap="onOpenStoreLocation"
-      >
-        <text class="store-address-icon">📍</text>
-        <text class="store-address">{{currentStore.address}}</text>
-        <text class="store-nav-hint" wx:if="{{currentStore.hasLocation}}">导航 ›</text>
+      <text class="pet-hero-sub" wx:if="{{petsCount > 0}}">已记录 {{petsCount}} 只毛孩子</text>
+      <text class="pet-hero-sub" wx:else>记录成长 · 关爱相伴</text>
+      <view class="pill-action">
+        <image class="pill-icon" src="/images/card/card-pets.png" mode="aspectFit" />
+        <text>{{petsCount > 0 ? '查看档案' : '添加宠物'}}</text>
       </view>
-      <view
-        wx:if="{{currentStore.contactPhone}}"
-        class="store-phone-row"
-        bindtap="onCallStore"
-        data-phone="{{currentStore.contactPhone}}"
-      >
-        <text class="store-phone-icon">📞</text>
-        <text class="store-phone">{{currentStore.contactPhone}}</text>
+    </view>
+    <image class="pet-hero-img" src="/images/home/home-hero-pet.png" mode="aspectFit" />
+    <view class="pet-mini-card" wx:if="{{primaryPet}}">
+      <cached-image
+        wx:if="{{primaryPet.photo}}"
+        custom-class="pet-mini-avatar"
+        src="{{primaryPet.photo}}"
+        mode="aspectFill"
+      />
+      <view wx:else class="pet-mini-avatar fallback">{{primaryPet.name ? primaryPet.name[0] : '宠'}}</view>
+      <view class="pet-mini-info">
+        <text class="pet-mini-name">{{primaryPet.name || '我的宝贝'}}</text>
+        <text class="pet-mini-meta">{{primaryPet.breed || primaryPet.type || '健康成长中'}}</text>
       </view>
     </view>
   </view>
-  <view class="welcome-card welcome-card-fallback" wx:else>
-    <view class="welcome-body">
-      <view class="welcome-row">
-        <cached-image custom-class="welcome-avatar" src="{{userInfo.avatarUrl}}" default-src="/images/default-avatar.png" mode="aspectFill" />
-        <view class="welcome-info">
-          <text class="welcome-name">{{userInfo.nickName || '宠主'}}</text>
-          <text class="welcome-sub">请通过商家分享链接进入店铺</text>
-        </view>
+
+  <view class="reserve-card" bindtap="onGoReserve">
+    <view class="reserve-copy">
+      <text class="reserve-title">预约专属服务</text>
+      <text class="reserve-sub">{{currentStore ? '专业照护，到店安心寄养' : '通过商家分享链接进入后预约'}}</text>
+      <view class="reserve-button">
+        <text>立即预约</text>
+        <text class="reserve-button-icon">›</text>
       </view>
     </view>
+    <image class="reserve-art" src="/images/home/reserve-art.png" mode="aspectFit" />
   </view>
-  <view class="quick-actions">
-    <view class="action-item" bindtap="onGoReserve">
-      <image class="action-icon-img" src="/images/card/card-reserve.png" mode="aspectFit" />
-      <text class="action-text">预约寄养</text>
+
+  <view class="status-grid">
+    <view class="info-card" bindtap="onGoPets">
+      <view class="info-card-top">
+        <text class="info-title">健康档案</text>
+        <text class="section-arrow">›</text>
+      </view>
+      <text class="info-sub">已记录 {{petsCount}} 只宠物</text>
+      <image class="info-art health" src="/images/home/health-art.png" mode="aspectFit" />
+      <text class="info-foot">健康状况良好</text>
     </view>
-    <view class="action-item" bindtap="onGoPets">
-      <image class="action-icon-img" src="/images/card/card-pets.png" mode="aspectFit" />
-      <text class="action-text">宠物档案</text>
+    <view class="info-card points-card" bindtap="onGoOrders">
+      <view class="info-card-top">
+        <text class="info-title">我的订单</text>
+        <text class="section-arrow">›</text>
+      </view>
+      <text class="points-num">{{boardingPets.length}}</text>
+      <text class="info-sub">近期寄养事项</text>
+      <image class="info-art points" src="/images/home/points-art.png" mode="aspectFit" />
+      <view class="mini-link">查看订单 ›</view>
     </view>
   </view>
-  <view class="card" wx:if="{{boardingPets.length > 0}}">
-    <view class="card-title">寄养中 ({{boardingPets.length}})</view>
+
+  <view class="card soft-card" wx:if="{{boardingPets.length > 0}}">
+    <view class="section-heading">
+      <text class="section-heading-text">近期事项</text>
+      <text class="section-more">全部 ›</text>
+    </view>
     <view class="boarding-item" wx:for="{{boardingPets}}" wx:key="id" bindtap="onGoDaily" data-id="{{item.id}}">
-      <view class="flex-row gap-20">
+      <view class="boarding-left">
         <cached-image wx:if="{{item.petPhoto}}" src="{{item.petPhoto}}" mode="aspectFill" custom-class="pet-avatar-small" />
         <view wx:else class="pet-avatar-small">{{item.petName[0]}}</view>
-        <view>
+        <view class="boarding-copy">
           <text class="boarding-name">{{item.petName}}</text>
-          <text class="text-gray" style="display:block;font-size:24rpx;">{{item.startDate}} ~ {{item.endDate}}</text>
+          <text class="boarding-date">{{item.startDate}} ~ {{item.endDate}}</text>
         </view>
       </view>
-      <text class="tag tag-green">寄养中</text>
+      <text class="tag tag-green">{{item.status === 'boarding' ? '寄养中' : '待到店'}}</text>
+    </view>
+  </view>
+
+  <view class="store-section" wx:if="{{currentStore}}">
+    <view class="section-heading">
+      <text class="section-heading-text">附近门店</text>
+      <text class="section-more">当前门店</text>
+    </view>
+    <view class="store-card">
+      <swiper
+        wx:if="{{currentStore.storePhotos.length}}"
+        class="store-swiper"
+        indicator-dots
+        indicator-color="rgba(137,107,85,0.22)"
+        indicator-active-color="#E98657"
+        autoplay="{{currentStore.storePhotos.length > 1}}"
+        circular
+        interval="4000"
+      >
+        <swiper-item wx:for="{{currentStore.storePhotos}}" wx:key="*this">
+          <view class="store-swiper-item" bindtap="onPreviewStorePhoto" data-url="{{item}}">
+            <cached-image custom-class="store-swiper-img" src="{{item}}" mode="aspectFill" />
+          </view>
+        </swiper-item>
+      </swiper>
+      <view class="store-placeholder" wx:else>
+        <image class="store-placeholder-img" src="/images/home/home-hero-pet.png" mode="aspectFit" />
+      </view>
+      <view class="store-body">
+        <view class="store-main-row">
+          <cached-image custom-class="welcome-avatar" src="{{currentStore.logo}}" default-src="/images/default-avatar.png" mode="aspectFill" />
+          <view class="welcome-info">
+            <text class="welcome-name">{{currentStore.name}}</text>
+            <text class="welcome-sub">{{currentStore.intro || '欢迎预约宠物寄养'}}</text>
+            <text class="welcome-meta" wx:if="{{currentStore.hours}}">营业时间：{{currentStore.hours}}</text>
+            <text class="welcome-meta" wx:if="{{currentStore.receptionRangeText}}">接待：{{currentStore.receptionRangeText}}</text>
+          </view>
+          <view class="store-status {{currentStore.isOpen ? 'open' : (currentStore.status === '未营业' ? 'inactive' : 'closed')}}">{{currentStore.status}}</view>
+        </view>
+        <view
+          wx:if="{{currentStore.address}}"
+          class="store-address-row {{currentStore.hasLocation ? 'tappable' : ''}}"
+          bindtap="onOpenStoreLocation"
+        >
+          <text class="store-address-icon">⌖</text>
+          <text class="store-address">{{currentStore.address}}</text>
+          <text class="store-nav-hint" wx:if="{{currentStore.hasLocation}}">导航 ›</text>
+        </view>
+        <view
+          wx:if="{{currentStore.contactPhone}}"
+          class="store-phone-row"
+          bindtap="onCallStore"
+          data-phone="{{currentStore.contactPhone}}"
+        >
+          <text class="store-phone-icon">☎</text>
+          <text class="store-phone">{{currentStore.contactPhone}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="store-empty-card" wx:else>
+    <cached-image custom-class="welcome-avatar" src="{{userInfo.avatarUrl}}" default-src="/images/default-avatar.png" mode="aspectFill" />
+    <view class="welcome-info">
+      <text class="welcome-name">{{userInfo.nickName || '宠主'}}</text>
+      <text class="welcome-sub">请通过商家分享链接进入店铺</text>
     </view>
   </view>
 </view>

@@ -1,8 +1,8 @@
 {
   "navigationBarTitleText": "我的店铺",
-  "navigationBarBackgroundColor": "#1D3D7A",
+  "navigationBarBackgroundColor": "#E98657",
   "navigationBarTextStyle": "white",
-  "backgroundColorTop": "#1D3D7A",
+  "backgroundColorTop": "#E98657",
   "backgroundColor": "#F7F8FA",
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "light"

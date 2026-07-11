@@ -1,31 +1,31 @@
 /**
- * HP Boxing Gym 风格设计令牌
- * 深海蓝 + 浅灰背景 + 白卡片 + 柔和阴影
+ * Warm pet care design tokens
+ * Cream background + soft cards + peach actions.
  */
 page {
-  --color-primary: #1D3D7A;
-  --color-primary-dark: #1A3B70;
-  --color-primary-light: #2B5AA0;
-  --color-accent-bg: #F2F4FF;
-  --color-bg-page: #F7F8FA;
-  --color-bg-card: #FFFFFF;
-  --color-bg-subtle: #F7F8FA;
-  --color-bg-input: #F7F8FA;
-  --color-text-primary: #333333;
-  --color-text-heading: #000000;
-  --color-text-secondary: #666666;
-  --color-text-tertiary: #999999;
-  --color-text-muted: #CCCCCC;
-  --color-border: #E8ECF0;
-  --color-border-light: #F0F2F5;
-  --color-danger: #E53935;
-  --color-success: #2E7D32;
-  --color-warning-bg: #F2F4FF;
-  --color-warning-border: #C5CEE0;
-  --shadow-card: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
-  --shadow-btn: 0 6rpx 20rpx rgba(29, 61, 122, 0.22);
-  --shadow-stat: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
-  --radius-card: 24rpx;
+  --color-primary: #E98657;
+  --color-primary-dark: #C86E42;
+  --color-primary-light: #F7AA78;
+  --color-accent-bg: #FFF1E7;
+  --color-bg-page: #FFF8F0;
+  --color-bg-card: #FFFDF8;
+  --color-bg-subtle: #FFF4E9;
+  --color-bg-input: #FFF7EF;
+  --color-text-primary: #5B4535;
+  --color-text-heading: #4E3729;
+  --color-text-secondary: #8C6A52;
+  --color-text-tertiary: #A98972;
+  --color-text-muted: #C8AA92;
+  --color-border: #F2DEC9;
+  --color-border-light: #F8EADC;
+  --color-danger: #D96F55;
+  --color-success: #6FA462;
+  --color-warning-bg: #FFF1E7;
+  --color-warning-border: #F2C39E;
+  --shadow-card: 0 10rpx 28rpx rgba(132, 90, 58, 0.10);
+  --shadow-btn: 0 10rpx 22rpx rgba(233, 134, 87, 0.24);
+  --shadow-stat: 0 4rpx 12rpx rgba(132, 90, 58, 0.12);
+  --radius-card: 26rpx;
   --radius-md: 16rpx;
   --radius-sm: 12rpx;
   --radius-pill: 999rpx;

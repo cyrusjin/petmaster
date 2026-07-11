@@ -5,7 +5,7 @@
   padding: 14rpx 0;
   font-size: 26rpx;
   color: #333333;
-  border-bottom: 1rpx solid #F2F4FF;
+  border-bottom: 1rpx solid #FFF1E7;
 }
 
 .detail-row:last-child {
@@ -31,5 +31,5 @@
 }
 
 .copyable-value {
-  color: #1D3D7A;
+  color: #E98657;
 }

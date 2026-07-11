@@ -26,10 +26,10 @@
   height: 80rpx;
   line-height: 80rpx;
   background: #F7F8FA;
-  border: 2rpx solid #E8ECF0;
+  border: 2rpx solid #F2DEC9;
   border-radius: 16rpx;
   font-size: 28rpx;
-  color: #1D3D7A;
+  color: #E98657;
   font-weight: 500;
   padding: 0;
 }

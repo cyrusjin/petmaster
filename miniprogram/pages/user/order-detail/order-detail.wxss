@@ -5,7 +5,7 @@
   color: #999999;
 }
 
-.detail-row { display: flex; justify-content: space-between; align-items: center; padding: 14rpx 0; font-size: 26rpx; color: #333333; border-bottom: 1rpx solid #F2F4FF; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; padding: 14rpx 0; font-size: 26rpx; color: #333333; border-bottom: 1rpx solid #FFF1E7; }
 .detail-row:last-child { border-bottom: none; }
 
 .order-action-row {
@@ -29,7 +29,7 @@
   border: 2rpx solid #E53935 !important;
 }
 .order-action-edit {
-  background: #1D3D7A !important;
+  background: #E98657 !important;
   color: #FFFFFF !important;
   border: none !important;
 }
