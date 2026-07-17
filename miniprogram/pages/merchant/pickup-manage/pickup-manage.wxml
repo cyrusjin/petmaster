@@ -38,6 +38,10 @@
         </view>
 
         <view class="pickup-info-row">
+          <text class="pickup-label">下单时间</text>
+          <text class="pickup-value">{{item.createTimeText}}</text>
+        </view>
+        <view class="pickup-info-row">
           <text class="pickup-label">接送时间</text>
           <text class="pickup-value">{{item.pickupTimeText}}</text>
         </view>

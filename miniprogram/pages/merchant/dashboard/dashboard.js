@@ -1,4 +1,5 @@
 const app = getApp();
+const { formatOrderCreateTime } = require('../../../utils/util');
 Page({
   data: { shop: {}, stats: { todayRevenue: 0, boardingCount: 0, totalOrders: 0, newOrders: 0 }, boardingList: [] },
   onShow() {
@@ -7,7 +8,11 @@ Page({
     const orders = app.getOrders();
     const boardingList = orders.filter(o => o.status === 'boarding').map(o => {
       const pet = pets.find(p => p.id === o.petId);
-      return { ...o, petPhoto: pet ? pet.photo : '' };
+      return {
+        ...o,
+        petPhoto: pet ? pet.photo : '',
+        createTimeText: formatOrderCreateTime(o) || '--'
+      };
     });
     const newOrders = orders.filter(o => o.status === 'pending').length;
     const todayRevenue = boardingList.reduce((s, o) => s + (o.totalFee || 0), 0);

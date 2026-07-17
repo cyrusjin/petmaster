@@ -1,7 +1,13 @@
+const { uploadFileToOss } = require('./cloudUpload');
+
 const MAX_STORE_PHOTOS = 6;
 
 function isCloudFileId(url) {
-  return typeof url === 'string' && url.startsWith('cloud://');
+  return typeof url === 'string' && (
+    url.startsWith('cloud://')
+    || url.startsWith('https://')
+    || url.startsWith('http://')
+  ) && !isLocalTempPath(url);
 }
 
 function isLocalTempPath(url) {
@@ -30,37 +36,30 @@ function normalizeStorePhotos(photos) {
 function uploadStorePhotos(photos, fallbackPhotos) {
   const list = normalizeStorePhotos(photos);
   if (!list.length) return Promise.resolve([]);
-  if (!wx.cloud) {
-    return Promise.reject(new Error('云开发未初始化，无法上传图片'));
-  }
 
   const fallback = normalizeStorePhotos(fallbackPhotos || []);
 
   const tasks = list.map((photo, index) => {
-    if (isCloudFileId(photo)) return Promise.resolve(photo);
+    if (isRemotePhoto(photo) && !isLocalTempPath(photo)) return Promise.resolve(photo);
 
     if (isLocalTempPath(photo)) {
       const ext = (photo.split('.').pop() || 'jpg').split('?')[0];
-      return wx.cloud.uploadFile({
-        cloudPath: `store-photos/${Date.now()}_${index}_${Math.random().toString(36).slice(2, 6)}.${ext}`,
-        filePath: photo
-      }).then((res) => {
-        const fileID = res && res.fileID;
-        if (!isCloudFileId(fileID)) {
+      return uploadFileToOss(photo, 'store-photos', ext).then((url) => {
+        if (!isRemotePhoto(url)) {
           return Promise.reject(new Error('图片上传失败'));
         }
-        return fileID;
+        return url;
       });
     }
 
     const fallbackPhoto = fallback[index];
-    if (isCloudFileId(fallbackPhoto)) return Promise.resolve(fallbackPhoto);
+    if (isRemotePhoto(fallbackPhoto)) return Promise.resolve(fallbackPhoto);
 
     return Promise.reject(new Error('部分图片未上传成功，请重试'));
   });
 
   return Promise.all(tasks).then((uploaded) => {
-    if (!uploaded.every(isCloudFileId)) {
+    if (!uploaded.every(isRemotePhoto)) {
       return Promise.reject(new Error('部分图片未上传成功，请重试'));
     }
     return uploaded;
@@ -69,24 +68,17 @@ function uploadStorePhotos(photos, fallbackPhotos) {
 
 function uploadStoreLogo(logo, fallbackLogo) {
   if (!logo) return Promise.resolve(logo || '');
-  if (isCloudFileId(logo)) return Promise.resolve(logo);
+  if (isRemotePhoto(logo) && !isLocalTempPath(logo)) return Promise.resolve(logo);
   if (isLocalTempPath(logo)) {
-    if (!wx.cloud) {
-      return Promise.reject(new Error('云开发未初始化，无法上传图片'));
-    }
     const ext = (logo.split('.').pop() || 'png').split('?')[0];
-    return wx.cloud.uploadFile({
-      cloudPath: `store-logos/${Date.now()}.${ext}`,
-      filePath: logo
-    }).then((res) => {
-      const fileID = res && res.fileID;
-      if (!isCloudFileId(fileID)) {
+    return uploadFileToOss(logo, 'store-logos', ext).then((url) => {
+      if (!isRemotePhoto(url)) {
         return Promise.reject(new Error('店铺头像上传失败，请重试'));
       }
-      return fileID;
+      return url;
     });
   }
-  if (isCloudFileId(fallbackLogo)) return Promise.resolve(fallbackLogo);
+  if (isRemotePhoto(fallbackLogo)) return Promise.resolve(fallbackLogo);
   return Promise.resolve(logo);
 }
 

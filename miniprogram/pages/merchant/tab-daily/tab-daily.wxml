@@ -89,6 +89,7 @@
               <text class="boarding-name">{{item.petName}}</text>
               <text class="expiring-tag" wx:if="{{item.isExpiringToday}}">今日到期</text>
             </view>
+            <text class="text-gray boarding-date">下单：{{item.createTimeText}}</text>
             <text class="text-gray boarding-date">到期：{{item.endDate}}</text>
           </view>
         </view>

@@ -43,7 +43,7 @@ Page({
       } else if (hasOpenid) {
         cloudStatus = '已连接';
       } else if (app.globalData.env) {
-        cloudStatus = '环境已配置，等待云函数响应';
+        cloudStatus = 'API 已配置，等待响应';
       }
 
       this.setData({
@@ -80,7 +80,7 @@ Page({
         this._loadAuthInfo();
         if (app.globalData.lastCloudError) {
           wx.showModal({
-            title: '云开发异常',
+            title: 'API 异常',
             content: app.globalData.lastCloudError,
             showCancel: false
           });

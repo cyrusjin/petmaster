@@ -10,6 +10,7 @@ const { resolveImageUrl } = require('../../../utils/imageCache');
 const { refreshSingleOrder } = require('../../../utils/orderRefresh');
 const { canMerchantModifyOrder } = require('../../../utils/orderActions');
 const { attachOrderDisplayNo } = require('../../../utils/displayNo');
+const { formatOrderCreateTime } = require('../../../utils/util');
 
 Page({
   data: {
@@ -54,8 +55,12 @@ Page({
   },
 
   _loadOrder() {
-    const order = attachOrderDisplayNo(app.getOrders().find((o) => o.id === this.orderId));
-    if (!order) return;
+    const found = attachOrderDisplayNo(app.getOrders().find((o) => o.id === this.orderId));
+    if (!found) return;
+    const order = {
+      ...found,
+      createTimeText: formatOrderCreateTime(found)
+    };
     const fees = normalizeOrderFees(order);
     const petView = buildPetDetailView(order.petSnapshot, order);
     const statusLabel = formatOrderStatus(order.status);

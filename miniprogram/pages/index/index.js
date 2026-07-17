@@ -3,6 +3,7 @@ const { guardUserTabPage } = require('../../utils/shell');
 const { buildStoreShareConfig, buildTimelineShareConfig, enableStoreShareMenu, resolveShareStoreId } = require('../../utils/storeShare');
 const storeDebug = require('../../utils/storeDebug');
 const { refreshUserOrders } = require('../../utils/orderRefresh');
+const { formatOrderCreateTime } = require('../../utils/util');
 
 Page({
   data: {
@@ -114,7 +115,11 @@ Page({
       .filter((o) => o.status === 'boarding' || o.status === 'awaiting_arrival')
       .map((o) => {
         const pet = pets.find((p) => p.id === o.petId);
-        return { ...o, petPhoto: pet ? pet.photo : '' };
+        return {
+          ...o,
+          petPhoto: pet ? pet.photo : '',
+          createTimeText: formatOrderCreateTime(o) || '--'
+        };
       });
     this.setData({
       userInfo,
@@ -143,7 +148,11 @@ Page({
           .filter((o) => o.status === 'boarding' || o.status === 'awaiting_arrival')
           .map((o) => {
             const pet = pets.find((p) => p.id === o.petId);
-            return { ...o, petPhoto: pet ? pet.photo : '' };
+            return {
+              ...o,
+              petPhoto: pet ? pet.photo : '',
+              createTimeText: formatOrderCreateTime(o) || '--'
+            };
           });
         this.setData({
           userInfo,

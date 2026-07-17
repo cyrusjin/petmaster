@@ -86,6 +86,7 @@
         <view wx:else class="pet-avatar-small">{{item.petName[0]}}</view>
         <view class="boarding-copy">
           <text class="boarding-name">{{item.petName}}</text>
+          <text class="boarding-date">下单：{{item.createTimeText}}</text>
           <text class="boarding-date">{{item.startDate}} ~ {{item.endDate}}</text>
         </view>
       </view>

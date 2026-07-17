@@ -3,7 +3,7 @@ const badgeUtil = require('../../../utils/badge');
 const { buildOrderListPetMeta } = require('../../../utils/petSnapshot');
 const { canMerchantModifyOrder } = require('../../../utils/orderActions');
 const merchantDemo = require('../../../utils/merchantDemo');
-const { refreshMerchantOrders } = require('../../../utils/orderRefresh');
+const { refreshMerchantOrders, startMerchantOrdersPoll, stopMerchantOrdersPoll } = require('../../../utils/orderRefresh');
 
 Page({
   data: {
@@ -23,6 +23,15 @@ Page({
       }
     }
     this._refreshOrders({ force: false, showLoading: !this.data.orders.length });
+    startMerchantOrdersPoll(this, () => this._refreshOrders({ force: true, showLoading: false }));
+  },
+
+  onHide() {
+    stopMerchantOrdersPoll(this);
+  },
+
+  onUnload() {
+    stopMerchantOrdersPoll(this);
   },
 
   onPullDownRefresh() {

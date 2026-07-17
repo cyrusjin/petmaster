@@ -2,6 +2,7 @@ const app = getApp();
 const { guardUserTabPage } = require('../../utils/shell');
 const badgeUtil = require('../../utils/badge');
 const { refreshUserOrders } = require('../../utils/orderRefresh');
+const { formatOrderCreateTime } = require('../../utils/util');
 
 Page({
   data: { activeTab: 'all', orders: [], filteredOrders: [] },
@@ -53,14 +54,19 @@ Page({
       app.getUserScopedOrders().sort((a, b) => (b.createTime || 0) - (a.createTime || 0))
     ).map((o) => {
       const pet = pets.find((p) => p.id === o.petId);
-      return { ...o, petPhoto: pet ? pet.photo : '' };
+      return {
+        ...o,
+        petPhoto: pet ? pet.photo : '',
+        createTimeText: formatOrderCreateTime(o) || '--'
+      };
     });
     const sig = orders.map((o) => [
       o.id,
       o.status,
       o.pricePendingConfirm ? 1 : 0,
       o.hasUnread ? 1 : 0,
-      o.totalFee || 0
+      o.totalFee || 0,
+      o.createTime || 0
     ].join(':')).join('|');
     if (sig !== this._ordersSig) {
       this._ordersSig = sig;

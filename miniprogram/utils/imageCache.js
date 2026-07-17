@@ -54,6 +54,10 @@ function ensureCacheDir() {
   }
 }
 
+function expectedCachePath(source) {
+  return `${CACHE_DIR}/${hashString(source)}.${guessExt(source)}`;
+}
+
 function readCacheIndex() {
   try {
     const index = wx.getStorageSync(STORAGE_KEYS.IMAGE_CACHE) || {};
@@ -105,25 +109,48 @@ function touchCacheEntry(source, filePath) {
   writeCacheIndex(index);
 }
 
-function getCachedPath(source) {
+/**
+ * 同步读取本地缓存路径（不触发下载）。
+ * 优先查索引，索引丢失时按 URL 哈希恢复磁盘文件并回写索引。
+ */
+function peekCachedPath(source, options = {}) {
+  const url = (source || '').trim();
+  if (!url) return '';
+  if (isLocalImagePath(url)) return url;
+
+  const touch = !(options && options.skipTouch);
   const index = readCacheIndex();
-  const item = index[source];
-  if (!item || !item.path || !fileExists(item.path)) {
-    if (item) {
-      delete index[source];
+  const item = index[url];
+  if (item && item.path && fileExists(item.path)) {
+    if (touch) {
+      item.updatedAt = Date.now();
       writeCacheIndex(index);
     }
-    return '';
+    return item.path;
   }
-  item.updatedAt = Date.now();
-  writeCacheIndex(index);
-  return item.path;
+
+  const expected = expectedCachePath(url);
+  if (fileExists(expected)) {
+    if (touch) touchCacheEntry(url, expected);
+    return expected;
+  }
+
+  if (item) {
+    delete index[url];
+    writeCacheIndex(index);
+  }
+  return '';
+}
+
+function getCachedPath(source) {
+  return peekCachedPath(source, { skipTouch: false });
 }
 
 function saveTempFile(tempFilePath, source) {
   ensureCacheDir();
-  const targetPath = `${CACHE_DIR}/${hashString(source)}.${guessExt(source)}`;
+  const targetPath = expectedCachePath(source);
   if (fileExists(targetPath)) {
+    touchCacheEntry(source, targetPath);
     return targetPath;
   }
   const savedPath = getFs().saveFileSync(tempFilePath, targetPath);
@@ -148,10 +175,11 @@ function downloadHttp(url) {
 }
 
 function downloadCloud(fileID) {
-  if (!wx.cloud) {
-    return Promise.reject(new Error('云开发未初始化'));
+  // 历史 cloud:// 地址已不再支持；新资源均为 HTTPS
+  if (isHttpUrl(fileID)) {
+    return downloadHttp(fileID);
   }
-  return wx.cloud.downloadFile({ fileID }).then((res) => res.tempFilePath);
+  return Promise.reject(new Error('不支持的云文件地址，请重新上传'));
 }
 
 function _resolveImageUrl(source) {
@@ -165,9 +193,9 @@ function _resolveImageUrl(source) {
     return Promise.resolve(cached);
   }
 
-  const loader = isCloudFileId(url)
-    ? downloadCloud(url)
-    : (isHttpUrl(url) ? downloadHttp(url) : Promise.resolve(''));
+  const loader = isHttpUrl(url)
+    ? downloadHttp(url)
+    : (isCloudFileId(url) ? downloadCloud(url) : Promise.resolve(''));
 
   return loader
     .then((tempFilePath) => {
@@ -228,6 +256,8 @@ module.exports = {
   isCloudFileId,
   isHttpUrl,
   isLocalImagePath,
+  peekCachedPath,
+  getCachedPath,
   resolveImageUrl,
   resolveImageUrls,
   clearImageFileCache

@@ -3,7 +3,8 @@ const { getDefaultWeightPricing } = require('./utils/weightPricing');
 const { getDefaultRoomPricing } = require('./utils/roomPricing');
 const auth = require('./utils/auth');
 const storeApi = require('./utils/store');
-const { CLOUD_ENV_ID } = require('./config/cloud');
+const { API_BASE_URL } = require('./config/cloud');
+const { ensureLogin } = require('./utils/cloudCall');
 const { normalizeIsMerchant, resolveRole, isMerchantApproved, isMerchantPending, isMerchantRejected, isMerchantStaff, isStaffOfStore, isStoreOwner } = require('./utils/role');
 const { applyRoleShell: applyTabShell } = require('./utils/shell');
 const { mergeBillingRules, buildUserStoreView, prepareUserStoreView } = require('./utils/storeContext');
@@ -21,10 +22,10 @@ const { clearImageFileCache } = require('./utils/imageCache');
 const { attachOrderDisplayNo, attachStoreDisplayNo, buildRandomDisplayNo } = require('./utils/displayNo');
 
 const USER_INFO_TTL = 5 * 60 * 1000;
-const ORDERS_TTL = 60 * 1000;
-const DAILY_LOGS_TTL = 30 * 1000;
-const PETS_TTL = 60 * 1000;
-const MERCHANT_STORE_TTL = 60 * 1000;
+const ORDERS_TTL = 15 * 1000;
+const DAILY_LOGS_TTL = 15 * 1000;
+const PETS_TTL = 30 * 1000;
+const MERCHANT_STORE_TTL = 30 * 1000;
 
 App({
   globalData: {
@@ -161,50 +162,37 @@ App({
   },
 
   _initCloud() {
-    if (!wx.cloud) {
-      console.error('[云开发] 请使用 2.2.3 或以上的基础库');
-      return;
-    }
-
-    const envId = CLOUD_ENV_ID || wx.cloud.DYNAMIC_CURRENT_ENV;
-    if (envId) {
-      wx.cloud.init({ env: envId, traceUser: true });
-      this.globalData.env = envId;
-      return;
-    }
-
-    // 仅有一个云环境时，可不传 env，使用小程序默认云环境
-    try {
-      wx.cloud.init({ traceUser: true });
-      this.globalData.env = 'default';
-      console.warn('[云开发] 未配置 CLOUD_ENV_ID，已使用默认云环境。建议在 miniprogram/config/cloud.js 填入环境 ID');
-    } catch (err) {
-      console.error('[云开发] 初始化失败，请在 miniprogram/config/cloud.js 填入 CLOUD_ENV_ID', err);
+    const baseUrl = (API_BASE_URL || '').trim();
+    if (!baseUrl) {
+      console.error('[API] 请在 miniprogram/config/cloud.js 配置 API_BASE_URL');
       this.globalData.env = '';
+      return;
     }
+    this.globalData.env = baseUrl;
   },
 
   _bootstrapCloud() {
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(false);
     }
-    return auth.initDatabase()
+    return ensureLogin()
+      .then(() => auth.initDatabase())
       .then((res) => {
         if (!res.success) {
-          console.error('[云开发] 初始化数据库失败', res.errMsg);
+          console.error('[API] 初始化数据库失败', res.errMsg);
           return false;
         }
         return dailyApi.initDatabase()
           .then((dailyRes) => {
             if (dailyRes && !dailyRes.success) {
-              console.error('[云开发] 初始化打卡数据表失败', dailyRes.errMsg);
+              console.error('[API] 初始化打卡数据表失败', dailyRes.errMsg);
             }
             this.globalData.cloudReady = true;
             return true;
           });
       })
       .catch((err) => {
-        console.error('[云开发] 初始化失败，请确认已上传云函数 userAuth', err);
+        console.error('[API] 初始化失败，请确认服务端已启动', err);
         return false;
       });
   },
@@ -460,7 +448,7 @@ App({
       return Promise.resolve(this.getCurrentStore());
     }
 
-    if (!wx.cloud) {
+    if (!this.globalData.env) {
       return Promise.resolve(this.getCurrentStore());
     }
 
@@ -519,7 +507,7 @@ App({
   },
 
   _syncUserStoreBinding(storeId) {
-    if (!storeId || !wx.cloud) return Promise.resolve();
+    if (!storeId || !this.globalData.env) return Promise.resolve();
     return auth.bindUserStore(storeId)
       .then((res) => {
         if (res.success && res.user) {
@@ -592,7 +580,7 @@ App({
 
     const shop = this.getShop();
 
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(shop);
     }
 
@@ -668,7 +656,7 @@ App({
       this._merchantStoreFetchedAt = Date.now();
       return Promise.resolve(saved);
     }
-    if (!wx.cloud) {
+    if (!this.globalData.env) {
       this.saveShop(shop);
       this._merchantStoreFetchedAt = Date.now();
       return Promise.resolve(shop);
@@ -810,8 +798,8 @@ App({
   },
 
   ensureCloudAndLogin(options = {}) {
-    if (!wx.cloud || !this.globalData.env) {
-      this.globalData.lastCloudError = '云环境未初始化，请检查 config/cloud.js';
+    if (!this.globalData.env) {
+      this.globalData.lastCloudError = 'API 未配置，请检查 config/cloud.js';
       return this.silentLogin(options);
     }
     return this.silentLogin(options);
@@ -872,7 +860,7 @@ App({
         return this._resolveCachedRole();
       })
       .catch((err) => {
-        console.error('[云开发] 后台刷新用户失败', err);
+        console.error('[API] 后台刷新用户失败', err);
         return this._resolveCachedRole();
       })
       .finally(() => {
@@ -903,42 +891,57 @@ App({
   },
 
   _doSilentLogin(force = false) {
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       this.globalData.role = 'user';
       this.globalData.isMerchant = false;
-      this.globalData.lastCloudError = this.globalData.lastCloudError || '云环境未连接';
+      this.globalData.lastCloudError = this.globalData.lastCloudError || 'API 未连接';
       if (!this.globalData.userInfo) {
         this.globalData.userInfo = { nickName: '微信用户', role: 'user', isMerchant: false, merchantStatus: '' };
       }
       return Promise.resolve('user');
     }
 
-    if (this._hasCachedUser()) {
-      this.globalData.isLoggedIn = true;
-      if (!force && this._isUserInfoFresh()) {
+    const afterLogin = () => {
+      if (this._hasCachedUser()) {
+        this.globalData.isLoggedIn = true;
+        if (!force && this._isUserInfoFresh()) {
+          return Promise.resolve(this._resolveCachedRole());
+        }
+        if (force) {
+          return this._fetchCloudUser();
+        }
+        this._backgroundRefreshUser();
         return Promise.resolve(this._resolveCachedRole());
       }
-      if (force) {
-        return this._fetchCloudUser();
-      }
-      this._backgroundRefreshUser();
-      return Promise.resolve(this._resolveCachedRole());
-    }
 
-    return this._fetchCloudUser()
-      .catch((err) => {
-        const errMsg = (err && (err.errMsg || err.message)) || '云函数调用异常';
-        this.globalData.lastCloudError = errMsg;
-        console.error('[云开发] silentLogin 失败', err);
-        if (this.isUserClientMode()) {
+      return this._fetchCloudUser()
+        .catch((err) => {
+          const errMsg = (err && (err.errMsg || err.message)) || '接口调用异常';
+          this.globalData.lastCloudError = errMsg;
+          console.error('[API] silentLogin 失败', err);
+          if (this.isUserClientMode()) {
+            applyTabShell();
+            return 'user';
+          }
+          this.globalData.role = 'user';
+          this.globalData.isMerchant = false;
           applyTabShell();
           return 'user';
-        }
-        this.globalData.role = 'user';
-        this.globalData.isMerchant = false;
-        applyTabShell();
-        return 'user';
-      });
+        });
+    };
+
+    return ensureLogin(force).then(afterLogin).catch((err) => {
+      const errMsg = (err && (err.errMsg || err.message)) || '登录失败';
+      this.globalData.lastCloudError = errMsg;
+      console.error('[API] ensureLogin 失败', err);
+      this.globalData.role = 'user';
+      this.globalData.isMerchant = false;
+      if (!this.globalData.userInfo) {
+        this.globalData.userInfo = { nickName: '微信用户', role: 'user', isMerchant: false, merchantStatus: '' };
+      }
+      applyTabShell();
+      return 'user';
+    });
   },
 
   isMerchantApproved() {
@@ -1007,8 +1010,8 @@ App({
   acceptStaffInvite(storeId) {
     const id = (storeId || '').trim();
     if (!id) return Promise.resolve(false);
-    if (!wx.cloud || !this.globalData.env) {
-      wx.showToast({ title: '请先完成云开发配置', icon: 'none' });
+    if (!this.globalData.env) {
+      wx.showToast({ title: '请先配置 API 地址', icon: 'none' });
       return Promise.resolve(false);
     }
     wx.removeStorageSync(STORAGE_KEYS.USER_CLIENT_MODE);
@@ -1185,7 +1188,7 @@ App({
   loadPets(options = {}) {
     const force = !!(options && options.force);
     const localPets = this.getPets();
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(localPets);
     }
     if (!force && this._petsFetchedAt && Date.now() - this._petsFetchedAt < PETS_TTL) {
@@ -1218,8 +1221,8 @@ App({
   },
 
   savePet(pet) {
-    if (!wx.cloud || !this.globalData.env) {
-      return Promise.reject(new Error('云环境未连接，无法保存'));
+    if (!this.globalData.env) {
+      return Promise.reject(new Error('API 未连接，无法保存'));
     }
     return petApi.savePet(pet)
       .then((res) => {
@@ -1234,8 +1237,8 @@ App({
   },
 
   deletePet(id) {
-    if (!wx.cloud || !this.globalData.env) {
-      return Promise.reject(new Error('云环境未连接，无法删除'));
+    if (!this.globalData.env) {
+      return Promise.reject(new Error('API 未连接，无法删除'));
     }
     return petApi.deletePet(id)
       .then((res) => {
@@ -1276,7 +1279,7 @@ App({
       merchantDemo.ensureDemoData();
       return Promise.resolve(merchantDemo.getDemoOrders());
     }
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(this.getOrders());
     }
     if (!force && this._ordersFetchedAt && Date.now() - this._ordersFetchedAt < ORDERS_TTL) {
@@ -1381,7 +1384,7 @@ App({
 
   saveOrder(order) {
     const userProfile = this.globalData.userInfo || {};
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(this._saveOrderLocal(order));
     }
     return orderApi.createOrder(order, userProfile)
@@ -1443,7 +1446,7 @@ App({
       return Promise.resolve(null);
     }
 
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(applyLocal());
     }
 
@@ -1531,7 +1534,7 @@ App({
     if (this.isMerchantDemoMode()) {
       return Promise.resolve(merchantDemo.saveDemoDailyLog(log));
     }
-    if (!wx.cloud || !this.globalData.env) {
+    if (!this.globalData.env) {
       return Promise.resolve(this._saveDailyLogLocal(log));
     }
     return dailyApi.saveDailyLog(log)
@@ -1564,7 +1567,7 @@ App({
 
   loadDailyLogs(orderId) {
     const matchOrder = (item) => item.orderId === orderId || item.order_id === orderId;
-    if (this.isMerchantDemoMode() || !wx.cloud || !this.globalData.env || !orderId) {
+    if (this.isMerchantDemoMode() || !this.globalData.env || !orderId) {
       return Promise.resolve(dedupeDailyLogs(this.getDailyLogs().filter(matchOrder)));
     }
     return dailyApi.listDailyLogs(orderId)
@@ -1596,7 +1599,7 @@ App({
     if (!ids.length) {
       return Promise.resolve(dedupeDailyLogs(this.getDailyLogs()));
     }
-    if (this.isMerchantDemoMode() || !wx.cloud || !this.globalData.env) {
+    if (this.isMerchantDemoMode() || !this.globalData.env) {
       return Promise.resolve(filterScoped());
     }
     if (!force && this._dailyLogsFetchedAt && Date.now() - this._dailyLogsFetchedAt < DAILY_LOGS_TTL) {

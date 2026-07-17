@@ -6,8 +6,19 @@ function formatDate(date) {
   return `${y}-${m}-${day}`;
 }
 function formatDateTime(date) {
+  if (date === null || date === undefined || date === '') return '';
   const d = new Date(date);
-  return formatDate(d) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(d.getTime())) return '';
+  const h = d.getHours().toString().padStart(2, '0');
+  const min = d.getMinutes().toString().padStart(2, '0');
+  return `${formatDate(d)} ${h}:${min}`;
+}
+/** 订单下单时间展示；无有效 createTime 时返回空串 */
+function formatOrderCreateTime(orderOrTs) {
+  const ts = orderOrTs && typeof orderOrTs === 'object'
+    ? orderOrTs.createTime
+    : orderOrTs;
+  return formatDateTime(ts);
 }
 function daysBetween(start, end) {
   return Math.ceil((new Date(end) - new Date(start)) / 86400000) + 1;
@@ -48,4 +59,4 @@ function calcOrderFee(order, rules) {
   const totalFee = baseFee + holidayFee + overtimeFee + extrasFee;
   return { baseFee, holidayFee, overtimeFee, extrasFee, totalFee, days, basePrice };
 }
-module.exports = { formatDate, formatDateTime, daysBetween, PET_TYPES, PET_GENDERS, SERVICE_TYPES, ORDER_STATUS, DAILY_CHECK_TYPES, CHECK_STATUS_MAP, getPetTypePrice, getPriceByMode, calcOrderFee };
+module.exports = { formatDate, formatDateTime, formatOrderCreateTime, daysBetween, PET_TYPES, PET_GENDERS, SERVICE_TYPES, ORDER_STATUS, DAILY_CHECK_TYPES, CHECK_STATUS_MAP, getPetTypePrice, getPriceByMode, calcOrderFee };

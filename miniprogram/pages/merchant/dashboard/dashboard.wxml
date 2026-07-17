@@ -39,7 +39,7 @@
   <view class="card" wx:if="{{boardingList.length > 0}}">
     <view class="card-title">在住宠物 ({{boardingList.length}})</view>
     <view class="boarding-item" wx:for="{{boardingList}}" wx:key="id" bindtap="onGoDetail" data-id="{{item.id}}">
-      <view class="flex-row gap-20"><cached-image wx:if="{{item.petPhoto}}" src="{{item.petPhoto}}" mode="aspectFill" custom-class="pet-avatar-small" /><view wx:else class="pet-avatar-small">{{item.petName[0]}}</view><view><text class="boarding-name">{{item.petName}}</text><text class="text-gray" style="display:block;font-size:22rpx;">到期：{{item.endDate}}</text></view></view>
+      <view class="flex-row gap-20"><cached-image wx:if="{{item.petPhoto}}" src="{{item.petPhoto}}" mode="aspectFill" custom-class="pet-avatar-small" /><view wx:else class="pet-avatar-small">{{item.petName[0]}}</view><view><text class="boarding-name">{{item.petName}}</text><text class="text-gray" style="display:block;font-size:22rpx;">下单：{{item.createTimeText}}</text><text class="text-gray" style="display:block;font-size:22rpx;">到期：{{item.endDate}}</text></view></view>
       <text class="text-red" wx:if="{{item.expiring}}">即将到期</text>
     </view>
   </view>

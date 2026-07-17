@@ -10,6 +10,7 @@ const {
   canShowUserOrderActions
 } = require('../../../utils/orderActions');
 const { attachOrderDisplayNo } = require('../../../utils/displayNo');
+const { formatOrderCreateTime } = require('../../../utils/util');
 
 Page({
   data: {
@@ -56,8 +57,12 @@ Page({
   },
 
   _loadOrder() {
-    const order = attachOrderDisplayNo(app.getOrders().find((o) => o.id === this.orderId));
-    if (!order) return;
+    const found = attachOrderDisplayNo(app.getOrders().find((o) => o.id === this.orderId));
+    if (!found) return;
+    const order = {
+      ...found,
+      createTimeText: formatOrderCreateTime(found)
+    };
     const feeSummary = normalizeOrderFees(order);
     const feeDetail = buildOrderFeeDetail(order, app.getStoreBillingRules(), {
       store: app.getCurrentStore()

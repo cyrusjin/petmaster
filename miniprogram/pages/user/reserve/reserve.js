@@ -153,7 +153,7 @@ Page({
 
     const cachedContact = loadReserveContact();
     const storeId = app.getStoreId();
-    const loadStore = storeId && wx.cloud
+    const loadStore = storeId && app.globalData.env
       ? app.bindStore(storeId, { force: !preserveForm, syncUser: false })
       : Promise.resolve();
 

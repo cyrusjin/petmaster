@@ -158,7 +158,9 @@
   height: auto;
   padding: 26rpx 24rpx;
   box-sizing: border-box;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1.45;
   text-align: center;
   background: #E98657;

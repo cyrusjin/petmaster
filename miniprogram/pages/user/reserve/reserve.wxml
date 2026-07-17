@@ -200,7 +200,7 @@
 
     <view class="card">
       <view class="card-title">特殊需求</view>
-      <textarea class="form-textarea" style="min-height:80rpx;height:80rpx;" placeholder="请填写特殊照料需求..." value="{{specialNeeds}}" bindinput="onSpecialInput" />
+      <textarea class="form-textarea" style="min-height:120rpx;" placeholder="请填写特殊照料需求..." value="{{specialNeeds}}" bindinput="onSpecialInput" />
     </view>
 
     <view class="card">

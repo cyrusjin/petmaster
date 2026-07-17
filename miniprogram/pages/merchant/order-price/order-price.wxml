@@ -12,6 +12,7 @@
     <view class="card-title">订单信息</view>
     <view class="detail-row"><text class="text-gray">宠物</text><text>{{order.petName}}</text></view>
     <view class="detail-row"><text class="text-gray">宠主</text><text>{{order.userNickName || '--'}}</text></view>
+    <view class="detail-row" wx:if="{{order.createTimeText}}"><text class="text-gray">下单时间</text><text>{{order.createTimeText}}</text></view>
     <view class="detail-row"><text class="text-gray">寄养时间</text><text>{{order.startDate}} ~ {{order.endDate}}</text></view>
     <view class="detail-row" wx:if="{{order.needPickup}}"><text class="text-gray">接送服务</text><text>需要</text></view>
   </view>

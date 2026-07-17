@@ -63,12 +63,8 @@ Page({
       if (!logo || logo.startsWith('cloud://') || logo.startsWith('https://') || logo.startsWith('http://')) {
         return Promise.resolve(logo);
       }
-      if (!wx.cloud) return Promise.resolve(logo);
-      const ext = (logo.split('.').pop() || 'png').split('?')[0];
-      return wx.cloud.uploadFile({
-        cloudPath: `store-logos/${Date.now()}.${ext}`,
-        filePath: logo
-      }).then((res) => res.fileID);
+      const { uploadStoreLogo } = require('../../../utils/storePhotos');
+      return uploadStoreLogo(logo);
     };
 
     uploadLogo()

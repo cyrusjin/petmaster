@@ -115,7 +115,8 @@
       >
         <view class="recent-main">
           <text class="recent-pet">{{item.petName}}</text>
-          <text class="recent-date text-gray">{{item.dateText}}</text>
+          <text class="recent-date text-gray">下单：{{item.createTimeText}}</text>
+          <text class="recent-date text-gray">寄养：{{item.dateText}}</text>
         </view>
         <view class="recent-side">
           <text class="recent-amount">¥{{item.amount}}</text>

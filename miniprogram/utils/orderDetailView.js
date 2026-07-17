@@ -1,6 +1,7 @@
 const { formatOrderStatus } = require('./orderStatus');
 const { formatPickupLegs } = require('./pickupInfo');
 const { resolveOrderDisplayNo } = require('./displayNo');
+const { formatOrderCreateTime } = require('./util');
 
 function displayText(value) {
   if (value === null || value === undefined || value === '') return '--';
@@ -13,6 +14,7 @@ function buildOrderDetailSections(order, petView, feeSummary, feeDetail) {
   const orderRows = [
     ['订单状态', formatOrderStatus(order.status)],
     ['订单编号', displayText(resolveOrderDisplayNo(order))],
+    ['下单时间', displayText(formatOrderCreateTime(order) || '--')],
     ['服务类型', displayText(order.serviceType)],
     ['宠主', displayText(order.userNickName || order.contactName)],
     ['联系电话', displayText(order.contactPhone || order.userPhone)]

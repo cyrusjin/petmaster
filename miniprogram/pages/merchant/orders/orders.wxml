@@ -24,6 +24,7 @@
             <text class="boarding-name">{{item.petName}}</text>
             <text class="text-gray order-subline">{{item.petType}} · {{item.serviceType}}</text>
             <text class="text-gray order-subline">品种：{{item.petBreed || '--'}} · {{item.petGender || '--'}} · {{item.petAgeText}}</text>
+            <text class="text-gray order-subline">下单：{{item.createTimeText}}</text>
             <text class="text-gray order-subline">寄养：{{item.boardingTime}}</text>
             <text class="text-gray order-subline" wx:if="{{item.userNickName}}">宠主：{{item.userNickName}}</text>
           </view>

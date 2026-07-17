@@ -80,7 +80,20 @@
 .boarding-date { display: block; font-size: 22rpx; margin-top: 4rpx; }
 .boarding-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10rpx; flex-shrink: 0; }
 .check-count { font-size: 22rpx; color: #666666; white-space: nowrap; }
-.go-check-btn { margin: 0; padding: 0 28rpx; height: 56rpx; line-height: 56rpx; font-size: 24rpx; color: #fff; background: #E98657; border-radius: 28rpx; border: none; }
+.go-check-btn {
+  margin: 0;
+  padding: 0 28rpx;
+  height: 56rpx;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #fff;
+  background: #E98657;
+  border-radius: 28rpx;
+  border: none;
+}
 .go-check-btn::after { border: none; }
 .expiring-tag { font-size: 20rpx; color: #E53935; background: #FFEBEE; padding: 2rpx 10rpx; border-radius: 8rpx; }
 

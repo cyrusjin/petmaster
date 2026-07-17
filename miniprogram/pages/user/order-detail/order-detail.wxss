@@ -17,10 +17,13 @@
   flex: 1;
   margin: 0 !important;
   height: 80rpx !important;
-  line-height: 80rpx !important;
   font-size: 28rpx !important;
   border-radius: 40rpx !important;
   padding: 0 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 .order-action-btn::after { border: none; }
 .order-action-cancel {

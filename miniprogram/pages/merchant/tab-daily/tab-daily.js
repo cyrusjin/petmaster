@@ -10,6 +10,7 @@ const merchantDemo = require('../../../utils/merchantDemo');
 const { countPendingPickupTasks } = require('../../../utils/pickupManage');
 const { hideHomeButton } = require('../../../utils/navBar');
 const { handlePageSecretTap } = require('../../../utils/hiddenAdmin');
+const { startMerchantOrdersPoll, stopMerchantOrdersPoll } = require('../../../utils/orderRefresh');
 
 function parseStaffInviteStoreId(options) {
   if (!options) return '';
@@ -82,6 +83,22 @@ Page({
 
       return this._bootstrapPage();
     });
+    startMerchantOrdersPoll(this, () => {
+      if (!app.canAccessMerchantBackend() || app.isMerchantDemoMode()) return Promise.resolve();
+      return app.loadOrders({ force: true }).then(() => {
+        const shop = app.getShop();
+        if (!shop || !shop.store_id) return;
+        return this._applyBoardingData(shop);
+      });
+    });
+  },
+
+  onHide() {
+    stopMerchantOrdersPoll(this);
+  },
+
+  onUnload() {
+    stopMerchantOrdersPoll(this);
   },
 
   _getPageEntryQuery() {

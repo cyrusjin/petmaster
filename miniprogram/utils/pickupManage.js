@@ -1,4 +1,5 @@
 const { formatOrderStatus } = require('./orderStatus');
+const { formatOrderCreateTime } = require('./util');
 
 const LEG_OUTBOUND = 'outbound';
 const LEG_RETURN = 'return';
@@ -74,6 +75,7 @@ function buildPickupListItem(order, leg) {
     pickupLongitude: order.pickupLongitude,
     hasCoords,
     pickupTimeText: formatPickupTime(order, leg),
+    createTimeText: formatOrderCreateTime(order) || '--',
     status: order.status,
     statusLabel: formatOrderStatus(order.status),
     leg,

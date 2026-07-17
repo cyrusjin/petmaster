@@ -5,12 +5,13 @@
   background: #F7F8FA;
   border: 2rpx solid #F2DEC9;
   border-radius: 12rpx;
-  padding: 16rpx 20rpx;
+  padding: 0 20rpx;
   font-size: 26rpx;
   color: #333333;
   text-align: center;
-  min-height: 72rpx;
-  line-height: 40rpx;
+  height: 80rpx;
+  min-height: 80rpx;
+  line-height: 80rpx;
   box-sizing: border-box;
 }
 .date-summary {
@@ -29,8 +30,11 @@
 .form-label { display: block; font-size: 26rpx; color: #333333; margin-bottom: 12rpx; }
 .form-input {
   width: 100%;
+  height: 80rpx;
+  min-height: 80rpx;
   box-sizing: border-box;
-  padding: 20rpx;
+  padding: 0 20rpx;
+  line-height: 80rpx;
   background: #F7F8FA;
   border: 2rpx solid #F2DEC9;
   border-radius: 12rpx;

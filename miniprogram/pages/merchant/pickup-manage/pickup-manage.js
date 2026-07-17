@@ -6,7 +6,7 @@ const {
   buildPickupList,
   countPendingPickupTasks
 } = require('../../../utils/pickupManage');
-const { refreshMerchantOrders } = require('../../../utils/orderRefresh');
+const { refreshMerchantOrders, startMerchantOrdersPoll, stopMerchantOrdersPoll } = require('../../../utils/orderRefresh');
 
 Page({
   data: {
@@ -20,6 +20,15 @@ Page({
 
   onShow() {
     this._loadList();
+    startMerchantOrdersPoll(this, () => this._loadList({ force: true }));
+  },
+
+  onHide() {
+    stopMerchantOrdersPoll(this);
+  },
+
+  onUnload() {
+    stopMerchantOrdersPoll(this);
   },
 
   onPullDownRefresh() {

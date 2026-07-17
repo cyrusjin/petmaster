@@ -216,7 +216,9 @@
   height: auto;
   padding: 26rpx 24rpx;
   box-sizing: border-box;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #E98657;
   color: #FFFFFF;
   font-size: 28rpx;

@@ -47,14 +47,23 @@ page {
 .form-input {
   width: 100%;
   height: 80rpx;
+  min-height: 80rpx;
   background: var(--color-bg-input);
   border-radius: var(--radius-md);
   padding: 0 24rpx;
   font-size: 28rpx;
+  line-height: 80rpx;
   box-sizing: border-box;
   border: 2rpx solid var(--color-border);
 }
 .form-input:focus { border-color: var(--color-primary); background: var(--color-bg-card); }
+/* flex 行内输入框不要 width:100%，否则单位/按钮会被挤到下一行 */
+.flex-row > .form-input,
+.phone-row > .form-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+}
 .form-textarea {
   width: 100%;
   min-height: 160rpx;
@@ -66,7 +75,7 @@ page {
   border: 2rpx solid var(--color-border);
 }
 
-/* 按钮 */
+/* 按钮：重置微信 button 默认边距，避免视觉偏右/溢出 */
 .btn-primary {
   width: 100%;
   height: 88rpx;
@@ -79,8 +88,12 @@ page {
   align-items: center;
   justify-content: center;
   border: none;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
   box-shadow: var(--shadow-btn);
 }
+.btn-primary::after { border: none; }
 .btn-primary:active { opacity: 0.88; transform: scale(0.98); }
 .btn-outline {
   width: 100%;
@@ -93,17 +106,24 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
+.btn-outline::after { border: none; }
 .btn-sm {
   padding: 12rpx 28rpx;
+  margin: 0;
   font-size: 24rpx;
   border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
+  box-sizing: border-box;
   font-weight: 500;
 }
+.btn-sm::after { border: none; }
 .btn-green { background: #2E7D32; color: #fff; }
 .btn-blue { background: var(--color-primary); color: #fff; }
 .btn-orange { background: #F57C00; color: #fff; }

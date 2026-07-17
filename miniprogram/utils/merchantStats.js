@@ -1,4 +1,5 @@
 const { normalizeOrderFees } = require('./orderFees');
+const { formatOrderCreateTime } = require('./util');
 
 const PERIOD_OPTIONS = [
   { key: 'today', label: '今日' },
@@ -226,6 +227,7 @@ function buildMerchantStatistics(orders, periodKey = 'month', now = new Date()) 
         status: order.status,
         statusLabel: buildStatusLabel(order.status),
         amount: formatMoneyDisplay(fees.totalFee),
+        createTimeText: formatOrderCreateTime(order) || '--',
         dateText: order.startDate && order.endDate
           ? `${order.startDate} ~ ${order.endDate}`
           : (order.createTime ? formatShortDate(order.createTime) : '--')

@@ -1,11 +1,14 @@
-const { isCloudFileId } = require('./imageCache');
-
 const videoUrlCache = new Map();
 const VIDEO_URL_TTL = 90 * 60 * 1000;
+
+function isCloudFileId(url) {
+  return typeof url === 'string' && url.startsWith('cloud://');
+}
 
 function resolveVideoUrl(source) {
   const fileID = (source || '').trim();
   if (!fileID) return Promise.resolve('');
+  // HTTPS / 已解析地址直接返回；cloud:// 历史数据无法在自建后端解析
   if (!isCloudFileId(fileID)) return Promise.resolve(fileID);
 
   const cached = videoUrlCache.get(fileID);
@@ -13,26 +16,8 @@ function resolveVideoUrl(source) {
     return Promise.resolve(cached.url);
   }
 
-  if (!wx.cloud) {
-    return Promise.resolve(fileID);
-  }
-
-  return wx.cloud.getTempFileURL({ fileList: [fileID] })
-    .then((res) => {
-      const item = res.fileList && res.fileList[0];
-      if (!item || item.status !== 0 || !item.tempFileURL) {
-        return fileID;
-      }
-      videoUrlCache.set(fileID, {
-        url: item.tempFileURL,
-        expireAt: Date.now() + VIDEO_URL_TTL
-      });
-      return item.tempFileURL;
-    })
-    .catch((err) => {
-      console.error('[mediaUrl] 视频地址解析失败', fileID, err);
-      return fileID;
-    });
+  console.warn('[mediaUrl] 仍为 cloud:// 地址，请迁移到 OSS', fileID);
+  return Promise.resolve(fileID);
 }
 
 function resolveVideoUrls(sources) {
@@ -47,7 +32,10 @@ function enrichLogsWithVideoUrls(logs) {
 
   return Promise.all(list.map((log) => {
     if (!log.video) {
-      return { ...log, videoUrl: '' };
+      return { ...log, videoUrl: log.videoUrl || '' };
+    }
+    if (log.videoUrl) {
+      return { ...log };
     }
     return resolveVideoUrl(log.video).then((videoUrl) => ({
       ...log,

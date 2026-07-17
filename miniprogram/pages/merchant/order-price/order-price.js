@@ -2,6 +2,7 @@ const app = getApp();
 const { parseFee, buildFeePayload, normalizeOrderFees } = require('../../../utils/orderFees');
 const { formatPickupLegs, formatPickupTripType } = require('../../../utils/pickupInfo');
 const { canMerchantModifyOrder } = require('../../../utils/orderActions');
+const { formatOrderCreateTime } = require('../../../utils/util');
 
 Page({
   data: {
@@ -26,25 +27,29 @@ Page({
   },
 
   _loadOrder() {
-    const order = app.getOrders().find((item) => item.id === this.orderId);
-    if (!order) {
+    const found = app.getOrders().find((item) => item.id === this.orderId);
+    if (!found) {
       wx.showToast({ title: '订单不存在', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
 
-    if (!['pending', 'awaiting_arrival', 'boarding', 'confirmed'].includes(order.status)) {
+    if (!['pending', 'awaiting_arrival', 'boarding', 'confirmed'].includes(found.status)) {
       wx.showToast({ title: '当前状态不可改价', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
 
-    if (!canMerchantModifyOrder(order)) {
+    if (!canMerchantModifyOrder(found)) {
       wx.showToast({ title: '价格待用户确认，暂不可改价', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
 
+    const order = {
+      ...found,
+      createTimeText: formatOrderCreateTime(found)
+    };
     const fees = normalizeOrderFees(order);
     const pickupTimeText = order.needPickup
       ? `${order.startDate || ''} ${order.pickupTime || order.startTime || ''}`.trim()

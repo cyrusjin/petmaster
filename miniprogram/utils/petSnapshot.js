@@ -127,6 +127,7 @@ function buildContractPetInfoLines(pet, orderFallback = {}) {
 }
 
 function buildOrderListPetMeta(order) {
+  const util = require('./util');
   const snapshot = order.petSnapshot || {};
   const breed = order.petBreed || snapshot.breed || '';
   const gender = order.petGender || snapshot.gender || '';
@@ -144,7 +145,8 @@ function buildOrderListPetMeta(order) {
     petGender: gender,
     petAge: age,
     petAgeText: age ? `${age}岁` : '--',
-    boardingTime
+    boardingTime,
+    createTimeText: util.formatOrderCreateTime(order) || '--'
   };
 }
 

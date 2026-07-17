@@ -28,10 +28,10 @@
       <input class="form-input" placeholder="请输入常用地址" value="{{address}}" bindinput="onAddrInput" />
     </view>
     <view class="form-group debug-info">
-      <text class="form-label">云开发状态</text>
+      <text class="form-label">后端连接状态</text>
       <text class="openid-text">{{cloudStatus}} · {{cloudEnv}}</text>
       <text class="form-label" style="margin-top:16rpx;">当前账号 openid（须与数据库一致）</text>
-      <text class="openid-text">{{openid || '未获取，请检查云环境配置'}}</text>
+      <text class="openid-text">{{openid || '未获取，请检查 API 配置'}}</text>
       <text class="role-text">当前角色：{{roleLabel}}</text>
       <text class="openid-text">数据库 isMerchant：{{dbIsMerchant}}</text>
       <text class="form-label" style="margin-top:16rpx;">绑定店铺编号</text>

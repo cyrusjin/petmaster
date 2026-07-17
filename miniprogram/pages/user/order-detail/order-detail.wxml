@@ -7,6 +7,7 @@
     <text class="copy-hint">点击蓝色内容可复制</text>
     <copyable-detail-row wx:if="{{order.storeName}}" label="寄养店铺" value="{{order.storeName}}" />
     <copyable-detail-row label="订单编号" value="{{order.displayNo}}" />
+    <copyable-detail-row wx:if="{{order.createTimeText}}" label="下单时间" value="{{order.createTimeText}}" />
     <copyable-detail-row label="服务类型" value="{{order.serviceType}}" />
     <copyable-detail-row label="宠物名称" value="{{order.petName}}" />
     <copyable-detail-row label="宠物类型" value="{{order.petType}}" />

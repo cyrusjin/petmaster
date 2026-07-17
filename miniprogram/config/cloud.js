@@ -1,10 +1,9 @@
 /**
- * 云开发环境 ID（必填，真机预览必须配置）
+ * 自建后端配置（阿里云 API，已不再使用云函数）
  *
- * 获取方式：
- * 微信开发者工具 → 顶部「云开发」→ 设置 → 环境 ID
- * 复制类似 cloud1-xxxxxxxx 的字符串填到下面
+ * 开发：公网 IP（开发者工具勾选「不校验合法域名」）
+ * 备案完成后改为：https://api.petmaster.me
  */
-const CLOUD_ENV_ID = 'cloud1-d5gkr4ns4bf9dc317';
+const API_BASE_URL = 'http://116.62.185.48';
 
-module.exports = { CLOUD_ENV_ID };
+module.exports = { API_BASE_URL };

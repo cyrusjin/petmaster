@@ -62,6 +62,7 @@ function countTodayCheckIns(logs, orderId, refDate = new Date()) {
 }
 
 function buildBoardingListWithDailyStats(orders, pets, logs, refDate = new Date()) {
+  const { formatOrderCreateTime } = require('./util');
   const todayCountMap = buildTodayCheckCountMap(logs, refDate);
   const list = (orders || []).map((order) => {
     const pet = (pets || []).find((item) => item.id === order.petId);
@@ -71,6 +72,7 @@ function buildBoardingListWithDailyStats(orders, pets, logs, refDate = new Date(
     return {
       ...order,
       petPhoto: pet ? pet.photo : '',
+      createTimeText: formatOrderCreateTime(order) || '--',
       todayCheckCount,
       needsCheck: todayCheckCount === 0,
       isExpiringToday: expiringToday,

@@ -1,4 +1,4 @@
-const { resolveImageUrl } = require('../../utils/imageCache');
+const { resolveImageUrl, peekCachedPath, isLocalImagePath } = require('../../utils/imageCache');
 
 Component({
   externalClasses: ['custom-class'],
@@ -56,16 +56,25 @@ Component({
         return;
       }
 
-      if (source.startsWith('/')) {
+      if (isLocalImagePath(source) || source.startsWith('/')) {
         this.setData({ displaySrc: source });
         return;
+      }
+
+      // 已下载过的图片同步落到本地路径，避免异步闪空白
+      const cached = peekCachedPath(source, { skipTouch: true });
+      if (cached) {
+        this.setData({ displaySrc: cached });
       }
 
       const taskId = Date.now();
       this._resolveTaskId = taskId;
       resolveImageUrl(source).then((path) => {
         if (this._resolveTaskId !== taskId) return;
-        this.setData({ displaySrc: path || source });
+        const next = path || source;
+        if (next !== this.data.displaySrc) {
+          this.setData({ displaySrc: next });
+        }
       });
     },
 

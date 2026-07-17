@@ -147,10 +147,14 @@
   margin: 0 !important;
   padding: 0 24rpx !important;
   height: 56rpx !important;
-  line-height: 56rpx !important;
   font-size: 24rpx !important;
   border-radius: 28rpx !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
+.pickup-btn::after { border: none; }
 .pickup-btn-ghost {
   background: #F7F8FA !important;
   color: #E98657 !important;
