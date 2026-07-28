@@ -3,10 +3,11 @@ const { normalizeClient } = require('../wechat');
 const userFields = require('./userFields');
 
 /**
- * 双小程序身份：
+ * 双小程序 + 服务号身份：
  * - users.openid：业务主 openid（兼容历史订单/店铺 ownerOpenid）
  * - users.openids.user / users.openids.merchant：两端各自 openid
- * - users.unionid：微信开放平台 UnionID（两端绑同一开放平台账号时可用）
+ * - users.openids.oa：服务号 openid（模板消息推送）
+ * - users.unionid：微信开放平台 UnionID（两端/服务号绑同一开放平台账号时可用）
  */
 
 function buildOpenidQuery(openid) {
@@ -16,6 +17,7 @@ function buildOpenidQuery(openid) {
       { openid },
       { 'openids.user': openid },
       { 'openids.merchant': openid },
+      { 'openids.oa': openid },
       { linkedOpenids: openid }
     ]
   };
@@ -45,6 +47,7 @@ function collectOpenids(userOrOpenid) {
   const openids = userOrOpenid.openids || {};
   if (openids.user) set.add(String(openids.user).trim());
   if (openids.merchant) set.add(String(openids.merchant).trim());
+  if (openids.oa) set.add(String(openids.oa).trim());
   return [...set].filter(Boolean);
 }
 
@@ -109,12 +112,18 @@ async function resolveLoginUser({ openid, unionid, client }) {
   let user = pickPrimaryUser(records);
   if (user) {
     user = await attachClientIdentity(user, { openid, unionid, client: appClient });
+    try {
+      const oaBindService = require('./oaBindService');
+      user = await oaBindService.attachPendingOaByUnionid(user, unionid || user.unionid);
+    } catch (err) {
+      console.warn('[identity] attachPendingOaByUnionid failed', err.message || err);
+    }
     return user;
   }
 
   const now = Date.now();
   const openids = { [appClient]: openid };
-  const newUser = {
+  let newUser = {
     openid,
     openids,
     unionid: unionid || '',
@@ -133,7 +142,14 @@ async function resolveLoginUser({ openid, unionid, client }) {
     createTime: now,
     updateTime: now
   };
-  return db.insertOne('users', newUser);
+  newUser = await db.insertOne('users', newUser);
+  try {
+    const oaBindService = require('./oaBindService');
+    newUser = await oaBindService.attachPendingOaByUnionid(newUser, unionid);
+  } catch (err) {
+    console.warn('[identity] attachPendingOaByUnionid failed', err.message || err);
+  }
+  return newUser;
 }
 
 /**

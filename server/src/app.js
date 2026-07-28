@@ -4,6 +4,8 @@ const config = require('./config');
 const { connectDb } = require('./db');
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
+const wechatOaRouter = require('./routes/wechatOa');
+const mapRouter = require('./routes/map');
 const oss = require('./oss');
 const {
   storeRouter,
@@ -21,6 +23,13 @@ async function main() {
 
   const app = express();
   app.use(cors());
+
+  // 服务号回调需要原始 XML，须在 json parser 之前挂载
+  app.use('/api/wechat/oa', express.text({
+    type: ['text/xml', 'application/xml', 'text/plain', '*/*'],
+    limit: '1mb'
+  }), wechatOaRouter);
+
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/health', (req, res) => {
@@ -41,6 +50,7 @@ async function main() {
   app.use('/api/pet', petRouter);
   app.use('/api/daily', dailyRouter);
   app.use('/api/upload', uploadRouter);
+  app.use('/api/map', mapRouter);
 
   app.use((req, res) => {
     res.status(404).json({ success: false, errMsg: '接口不存在' });

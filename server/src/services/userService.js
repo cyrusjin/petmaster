@@ -1,5 +1,6 @@
 const db = require('../db');
 const wechat = require('../wechat');
+const config = require('../config');
 const identity = require('./identity');
 const userFields = require('./userFields');
 
@@ -19,6 +20,7 @@ function formatUser(doc) {
     ? [...new Set(doc.pet_ids.filter((id) => typeof id === 'string' && id.trim()))]
     : [];
   const storeFields = formatUserStoreFields(doc);
+  const oaOpenid = (doc.openids && doc.openids.oa) || '';
   return {
     _id: String(doc._id),
     openid: doc.openid,
@@ -37,6 +39,8 @@ function formatUser(doc) {
     isMerchant,
     hasMerchantCapability: isMerchant,
     role: isMerchant ? 'merchant' : 'user',
+    oaBound: !!oaOpenid,
+    oaQrcodeUrl: (config.wxOa && config.wxOa.qrcodeUrl) || '',
     createTime: doc.createTime,
     updateTime: doc.updateTime
   };

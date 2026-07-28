@@ -25,6 +25,7 @@ npm start
 | POST | `/api/order` | 原 orderService |
 | POST | `/api/pet` | 原 petService |
 | POST | `/api/daily` | 原 dailyService |
+| GET/POST | `/api/wechat/oa` | 服务号消息回调（关注绑定 openids.oa） |
 | POST | `/api/upload/sign` | 获取本地上传凭证 |
 | POST | `/api/upload` | 小程序直传文件（multipart，需登录） |
 | GET | `/media/*` | 本地媒体静态访问 |

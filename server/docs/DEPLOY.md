@@ -19,6 +19,21 @@
 登录接口：`POST /api/auth/login`，body 带 `client: "user" | "merchant"`。  
 两端 openid 不同，服务端用 UnionID / 手机号 / `openids.*` 对齐到同一业务用户。
 
+## 2.1 服务号模板消息
+
+| 变量 | 说明 |
+|------|------|
+| `WX_OA_APPID` / `WX_OA_SECRET` | 服务号凭证 |
+| `WX_OA_TOKEN` | 回调验签 Token |
+| `WX_OA_AES_KEY` | 可选；安全模式 EncodingAESKey |
+| `WX_OA_TEMPLATE_*` | 新订单 / 订单状态 / 打卡 模板 ID |
+| `WX_OA_QRCODE_URL` | 小程序引导关注用的二维码图 |
+| `TENCENT_MAP_KEY` | 腾讯位置服务 WebServiceAPI Key（接送驾车距离） |
+
+回调 URL：`https://api.petmaster.me/api/wechat/oa`（明文或兼容模式）。用户关注后通过 UnionID 写入 `users.openids.oa`。
+
+接送按距离计费时，小程序通过 `GET/POST /api/map/driving-distance` 由服务端代理腾讯驾车距离接口。
+
 ## 3. 安装基础软件
 
 ```bash

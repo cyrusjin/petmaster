@@ -33,6 +33,41 @@ const userSecret = required('WX_SECRET') || required('WX_USER_SECRET');
 const merchantAppId = required('WX_MERCHANT_APPID', '');
 const merchantSecret = required('WX_MERCHANT_SECRET', '');
 
+function parseJsonMap(raw, fallback = {}) {
+  const text = String(raw || '').trim();
+  if (!text) return { ...fallback };
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...fallback };
+    return { ...fallback, ...parsed };
+  } catch (_) {
+    return { ...fallback };
+  }
+}
+
+const defaultTemplateFields = {
+  newOrder: {
+    orderNo: 'character_string1',
+    petName: 'thing2',
+    serviceType: 'thing3',
+    reserveTime: 'time4',
+    storeName: 'thing5'
+  },
+  orderStatus: {
+    orderNo: 'character_string1',
+    petName: 'thing2',
+    status: 'phrase3',
+    storeName: 'thing4',
+    updateTime: 'time5'
+  },
+  dailyCheck: {
+    petName: 'thing1',
+    checks: 'thing2',
+    storeName: 'thing3',
+    checkTime: 'time4'
+  }
+};
+
 const config = {
   port: Number(required('PORT', '3000')),
   mongoUri: required('MONGO_URI', 'mongodb://127.0.0.1:27017/petmaster'),
@@ -51,6 +86,26 @@ const config = {
       secret: merchantSecret || userSecret
     }
   },
+  // 服务号（模板消息推送）
+  wxOa: {
+    appId: required('WX_OA_APPID', ''),
+    secret: required('WX_OA_SECRET', ''),
+    token: required('WX_OA_TOKEN', ''),
+    aesKey: required('WX_OA_AES_KEY', ''),
+    qrcodeUrl: required('WX_OA_QRCODE_URL', ''),
+    templates: {
+      newOrder: required('WX_OA_TEMPLATE_NEW_ORDER', ''),
+      orderStatus: required('WX_OA_TEMPLATE_ORDER_STATUS', ''),
+      dailyCheck: required('WX_OA_TEMPLATE_DAILY_CHECK', '')
+    },
+    templateFields: {
+      newOrder: parseJsonMap(required('WX_OA_FIELDS_NEW_ORDER', ''), defaultTemplateFields.newOrder),
+      orderStatus: parseJsonMap(required('WX_OA_FIELDS_ORDER_STATUS', ''), defaultTemplateFields.orderStatus),
+      dailyCheck: parseJsonMap(required('WX_OA_FIELDS_DAILY_CHECK', ''), defaultTemplateFields.dailyCheck)
+    }
+  },
+  // 腾讯位置服务（接送导航距离）
+  tencentMapKey: required('TENCENT_MAP_KEY', ''),
   // 媒体文件存轻量服务器本地磁盘（不再依赖 OSS）
   media: {
     root: required('MEDIA_ROOT', path.join(__dirname, '..', 'data', 'media')),

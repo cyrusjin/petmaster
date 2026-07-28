@@ -4,7 +4,8 @@ const { calcStayFeeBreakdown, formatMoney } = require('../../../utils/billing');
 const timePicker = require('../../../utils/timePicker');
 const { validateReserveContact } = require('../../../utils/reserveContact');
 const { validatePickupInfo, buildPickupPayload } = require('../../../utils/pickupInfo');
-const { calcPickupShippingFee, canCalcDistancePickupFee } = require('../../../utils/pickupPricing');
+const { calcPickupShippingFee, canCalcDistancePickupFee, parseStoreCoords } = require('../../../utils/pickupPricing');
+const { resolveStorePickupDrivingDistance } = require('../../../utils/mapDistance');
 const { choosePickupLocation, formatLocationAddress, getPickupLocationValidationMessage } = require('../../../utils/location');
 const { isOrderEditTimeOnly } = require('../../../utils/orderActions');
 const { showValidationAlert } = require('../../../utils/formAlert');
@@ -35,6 +36,9 @@ Page({
     pickupLongitude: '',
     pickupContactPhone: '',
     pickupLeg: 'both',
+    pickupDrivingDistanceKm: null,
+    pickupDistanceMode: '',
+    pickupDistanceError: '',
     feeReady: false,
     totalFeeText: '0',
     showTimePicker: false,
@@ -174,6 +178,9 @@ Page({
       patch.pickupLongitude = '';
       patch.pickupContactPhone = '';
       patch.pickupLeg = 'both';
+      patch.pickupDrivingDistanceKm = null;
+      patch.pickupDistanceMode = '';
+      patch.pickupDistanceError = '';
     }
     this.setData(patch);
     this.calcFee();
@@ -204,7 +211,10 @@ Page({
           pickupAddress: formatLocationAddress(res),
           pickupLocationName: (res.name || '').trim(),
           pickupLatitude: res.latitude,
-          pickupLongitude: res.longitude
+          pickupLongitude: res.longitude,
+          pickupDrivingDistanceKm: null,
+          pickupDistanceMode: '',
+          pickupDistanceError: ''
         }, () => this.calcFee());
       })
       .catch(() => {
@@ -213,11 +223,16 @@ Page({
   },
 
   calcFee() {
-    const { order, timeOnly, startDate, endDate, startTime, endTime, needPickup, store } = this.data;
+    const {
+      order, timeOnly, startDate, endDate, startTime, endTime, needPickup, store,
+      pickupLatitude, pickupLongitude, pickupDrivingDistanceKm, pickupDistanceMode
+    } = this.data;
     const useStartDate = timeOnly ? order.startDate : startDate;
     const useStartTime = timeOnly ? order.startTime : startTime;
+    const feeToken = (this._feeCalcToken = (this._feeCalcToken || 0) + 1);
+
     if (!useStartDate || !endDate || !useStartTime || !endTime) {
-      this.setData({ feeReady: false, totalFeeText: '0' });
+      this.setData({ feeReady: false, totalFeeText: '0', _feePayload: null });
       return;
     }
 
@@ -228,41 +243,87 @@ Page({
     );
     const storeView = store || {};
     const pickupFlags = this._getPickupFlags();
-    const pickupReady = !needPickup || storeView.pickupPricingMode !== 'distance'
-      || canCalcDistancePickupFee(storeView, this.data.pickupLatitude, this.data.pickupLongitude);
-    const pickupFee = needPickup && pickupReady
-      ? calcPickupShippingFee({
-        store: storeView,
-        ...pickupFlags,
-        pickupLatitude: this.data.pickupLatitude,
-        pickupLongitude: this.data.pickupLongitude
-      })
-      : 0;
-    const totalFee = breakdown.baseFee + pickupFee;
+    const isDistanceMode = storeView.pickupPricingMode === 'distance';
+    const storeHasLocation = !!parseStoreCoords(storeView);
+    const hasPickupCoords = !!(pickupLatitude && pickupLongitude);
+    const needsDrivingDistance = !!(needPickup && isDistanceMode && storeHasLocation && hasPickupCoords);
 
-    this.setData({
-      feeReady: breakdown.ready && (!needPickup || pickupReady),
-      totalFeeText: formatMoney(totalFee),
-      _feePayload: {
-        days: breakdown.days,
-        boardingFee: breakdown.baseFee,
-        shippingFee: pickupFee,
-        totalFee,
-        feeSnapshot: {
-          basePrice,
-          dailyBreakdown: breakdown.dailyBreakdown,
-          chargeSummary: breakdown.chargeSummary,
-          daysText: breakdown.daysText
-        },
-        basePrice
+    const applyFeeUi = (distanceKm, distanceError, distanceMode) => {
+      if (feeToken !== this._feeCalcToken) return;
+      const resolvedMode = distanceMode === 'straight' ? 'straight' : (distanceKm != null ? 'driving' : '');
+      const pickupReady = !needPickup || !isDistanceMode
+        || canCalcDistancePickupFee(storeView, pickupLatitude, pickupLongitude, distanceKm);
+      const pickupFee = needPickup && pickupReady
+        ? calcPickupShippingFee({
+          store: storeView,
+          ...pickupFlags,
+          pickupLatitude,
+          pickupLongitude,
+          distanceKm,
+          distanceMode: resolvedMode
+        })
+        : 0;
+      const totalFee = breakdown.baseFee + pickupFee;
+      const feeReady = breakdown.ready && (!needPickup || pickupReady);
+
+      this.setData({
+        feeReady,
+        totalFeeText: formatMoney(totalFee),
+        pickupDrivingDistanceKm: distanceKm != null ? distanceKm : null,
+        pickupDistanceMode: resolvedMode,
+        pickupDistanceError: distanceError || '',
+        _feePayload: {
+          days: breakdown.days,
+          boardingFee: breakdown.baseFee,
+          shippingFee: pickupFee,
+          totalFee,
+          feeSnapshot: {
+            basePrice,
+            dailyBreakdown: breakdown.dailyBreakdown,
+            chargeSummary: breakdown.chargeSummary,
+            daysText: breakdown.daysText,
+            pickupDistanceKm: distanceKm != null ? distanceKm : undefined,
+            pickupDistanceMode: isDistanceMode ? (resolvedMode || 'driving') : undefined
+          },
+          basePrice
+        }
+      });
+
+      if (distanceError) {
+        wx.showToast({ title: distanceError, icon: 'none' });
       }
-    });
+    };
+
+    if (!needsDrivingDistance) {
+      applyFeeUi(null, '', '');
+      return;
+    }
+
+    if (pickupDrivingDistanceKm != null && pickupDrivingDistanceKm !== '') {
+      applyFeeUi(pickupDrivingDistanceKm, '', pickupDistanceMode || 'driving');
+      return;
+    }
+
+    this.setData({ feeReady: false });
+    resolveStorePickupDrivingDistance(storeView, pickupLatitude, pickupLongitude)
+      .then((res) => {
+        if (feeToken !== this._feeCalcToken) return;
+        if (!res || !res.success) {
+          applyFeeUi(null, (res && res.errMsg) || '距离计算失败，请重新选择地址', '');
+          return;
+        }
+        applyFeeUi(res.distanceKm, '', res.distanceMode || 'driving');
+      })
+      .catch(() => {
+        if (feeToken !== this._feeCalcToken) return;
+        applyFeeUi(null, '距离计算失败，请重新选择地址', '');
+      });
   },
 
   onSubmit() {
     const { order, timeOnly, feeReady, _feePayload } = this.data;
     if (!feeReady || !_feePayload) {
-      showValidationAlert('请完善时间信息');
+      showValidationAlert(this.data.pickupDistanceError || '请完善时间信息');
       return;
     }
 

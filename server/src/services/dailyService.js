@@ -3,6 +3,7 @@ const oss = require('../oss');
 const { canManageOrder } = require('./orderService');
 const identity = require('./identity');
 const userFields = require('./userFields');
+const notifyService = require('./notifyService');
 
 const DAILY_LOGS_COLLECTION = 'daily_logs';
 
@@ -212,6 +213,7 @@ async function saveDailyLog(event, openid) {
   await db.insertOne('daily_logs', logData);
 
   const [savedLog] = await enrichLogsMedia([logData]);
+  notifyService.notifyUserDailyCheck(order, savedLog || formatLog(logData)).catch(() => {});
   return {
     success: true,
     log: savedLog || formatLog(logData)

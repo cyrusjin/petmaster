@@ -664,6 +664,12 @@ App({
       role,
       isMerchant,
       hasMerchantCapability: isMerchant,
+      oaBound: Object.prototype.hasOwnProperty.call(remoteUser, 'oaBound')
+        ? !!remoteUser.oaBound
+        : !!cached.oaBound,
+      oaQrcodeUrl: Object.prototype.hasOwnProperty.call(remoteUser, 'oaQrcodeUrl')
+        ? (remoteUser.oaQrcodeUrl || '')
+        : (cached.oaQrcodeUrl || ''),
       createTime: remoteUser.createTime || cached.createTime || Date.now()
     };
 

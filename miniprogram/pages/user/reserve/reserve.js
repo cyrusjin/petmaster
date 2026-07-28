@@ -19,6 +19,7 @@ const {
   buildPickupFeeQuote,
   parseStoreCoords
 } = require('../../../utils/pickupPricing');
+const { resolveStorePickupDrivingDistance } = require('../../../utils/mapDistance');
 const {
   choosePickupLocation,
   formatLocationAddress,
@@ -66,6 +67,9 @@ Page({
     pickupFeePendingText: '',
     pickupFeeStoreLocationMissing: false,
     pickupFeeReady: false,
+    pickupDrivingDistanceKm: null,
+    pickupDistanceMode: '',
+    pickupDistanceError: '',
     grandTotalFee: 0,
     grandTotalFeeText: '0',
     baseFee: 0,
@@ -399,6 +403,9 @@ Page({
       patch.pickupTime = '';
       patch.pickupTimeDisplay = '选择接送时间';
       patch.pickupLeg = 'both';
+      patch.pickupDrivingDistanceKm = null;
+      patch.pickupDistanceMode = '';
+      patch.pickupDistanceError = '';
       this._pickupTimeTouched = false;
     }
     this.setData(patch);
@@ -422,7 +429,10 @@ Page({
           pickupAddress: formatLocationAddress(res),
           pickupLocationName: (res.name || '').trim(),
           pickupLatitude: res.latitude,
-          pickupLongitude: res.longitude
+          pickupLongitude: res.longitude,
+          pickupDrivingDistanceKm: null,
+          pickupDistanceMode: '',
+          pickupDistanceError: ''
         }, () => this.calcFee());
       })
       .catch(() => {
@@ -503,6 +513,9 @@ Page({
       pickupFeePendingText: '',
       pickupFeeStoreLocationMissing: false,
       pickupFeeReady: false,
+      pickupDrivingDistanceKm: null,
+      pickupDistanceMode: '',
+      pickupDistanceError: '',
       grandTotalFee: 0,
       grandTotalFeeText: '0',
       baseFee: 0,
@@ -519,11 +532,13 @@ Page({
   calcFee() {
     const {
       selectedPet, startDate, endDate, startTime, endTime, extraList, needPickup,
-      roomType, billingMode, store, pickupLatitude, pickupLongitude
+      roomType, billingMode, store, pickupLatitude, pickupLongitude,
+      pickupDrivingDistanceKm, pickupDistanceMode
     } = this.data;
     const rules = app.getStoreBillingRules();
     const chargeSummary = buildChargeSummary(rules);
     const pickupFlags = this._getPickupFlags();
+    const feeToken = (this._feeCalcToken = (this._feeCalcToken || 0) + 1);
 
     if (!selectedPet || !startDate || !endDate || !startTime || !endTime) {
       this._resetFeeState(chargeSummary);
@@ -549,87 +564,139 @@ Page({
     const boardingTotalFee = breakdown.baseFee + extrasFee;
     const isDistanceMode = storeView.pickupPricingMode === 'distance';
     const storeHasLocation = !!parseStoreCoords(storeView);
-    const pickupQuote = needPickup
-      ? buildPickupFeeQuote(storeView, {
-        ...pickupFlags,
-        pickupLatitude,
-        pickupLongitude
-      })
-      : null;
-    const pickupFeeStoreLocationMissing = !!(needPickup && isDistanceMode && !storeHasLocation);
-    const pickupFeePending = needPickup && isDistanceMode && (
-      pickupFeeStoreLocationMissing || !canCalcDistancePickupFee(storeView, pickupLatitude, pickupLongitude)
-    );
-    const pickupFeeReady = needPickup && (
-      !isDistanceMode || (!pickupFeeStoreLocationMissing && canCalcDistancePickupFee(storeView, pickupLatitude, pickupLongitude))
-    );
-    const pickupFee = pickupFeeReady && pickupQuote && pickupQuote.ready ? pickupQuote.fee : 0;
-    const grandTotalFee = boardingTotalFee + (pickupFeeReady ? pickupFee : 0);
-    const totalDisplayReady = breakdown.ready && (!needPickup || pickupFeeReady);
+    const hasPickupCoords = !!(pickupLatitude && pickupLongitude);
+    const needsDrivingDistance = !!(needPickup && isDistanceMode && storeHasLocation && hasPickupCoords);
+    const drivingKm = needsDrivingDistance ? pickupDrivingDistanceKm : null;
 
-    let pickupFeeStandard = '';
-    let pickupDistanceText = '';
-    let pickupFeeCalcText = '';
-    let pickupFeePendingText = '';
+    const applyFeeUi = (distanceKm, distanceError, distanceMode) => {
+      if (feeToken !== this._feeCalcToken) return;
+      const resolvedMode = distanceMode === 'straight' ? 'straight' : (distanceKm != null ? 'driving' : '');
 
-    if (needPickup) {
-      if (pickupFeeStoreLocationMissing) {
-        pickupFeePendingText = '店铺未设置地图位置，无法按距离计算接送费，请联系商家';
-      } else if (pickupFeePending) {
-        pickupFeePendingText = '选择接送地址后可显示直线距离与接送费';
+      const pickupQuote = needPickup
+        ? buildPickupFeeQuote(storeView, {
+          ...pickupFlags,
+          pickupLatitude,
+          pickupLongitude,
+          distanceKm,
+          distanceMode: resolvedMode
+        })
+        : null;
+      const pickupFeeStoreLocationMissing = !!(needPickup && isDistanceMode && !storeHasLocation);
+      const waitingDistance = !!(needsDrivingDistance && (distanceKm == null || distanceKm === '') && !distanceError);
+      const pickupFeePending = needPickup && isDistanceMode && (
+        pickupFeeStoreLocationMissing
+        || !hasPickupCoords
+        || waitingDistance
+        || !!distanceError
+        || !canCalcDistancePickupFee(storeView, pickupLatitude, pickupLongitude, distanceKm)
+      );
+      const pickupFeeReady = needPickup && (
+        !isDistanceMode
+        || (!pickupFeeStoreLocationMissing
+          && canCalcDistancePickupFee(storeView, pickupLatitude, pickupLongitude, distanceKm))
+      );
+      const pickupFee = pickupFeeReady && pickupQuote && pickupQuote.ready ? pickupQuote.fee : 0;
+      const grandTotalFee = boardingTotalFee + (pickupFeeReady ? pickupFee : 0);
+      const totalDisplayReady = breakdown.ready && (!needPickup || pickupFeeReady);
+
+      let pickupFeeStandard = '';
+      let pickupDistanceText = '';
+      let pickupFeeCalcText = '';
+      let pickupFeePendingText = '';
+
+      if (needPickup) {
+        if (pickupFeeStoreLocationMissing) {
+          pickupFeePendingText = '店铺未设置地图位置，无法按距离计算接送费，请联系商家';
+        } else if (distanceError) {
+          pickupFeePendingText = distanceError;
+        } else if (waitingDistance) {
+          pickupFeePendingText = '正在计算驾车导航距离…';
+        } else if (pickupFeePending) {
+          pickupFeePendingText = '选择接送地址后可显示导航距离与接送费';
+        }
+
+        if (pickupQuote && pickupQuote.ready) {
+          pickupFeeStandard = `收费标准：${pickupQuote.standardText}`;
+          if (pickupQuote.mode === 'distance' && pickupQuote.distanceText) {
+            pickupDistanceText = resolvedMode === 'straight'
+              ? `${pickupQuote.distanceText}（导航暂不可用，已按直线距离估算）`
+              : `${pickupQuote.distanceText}（店铺至接送地址驾车距离）`;
+          }
+          if (pickupQuote.mode === 'flat') {
+            pickupFeeCalcText = pickupQuote.legCount > 1
+              ? `单程 ¥${pickupQuote.perLegFeeText} × ${pickupQuote.legCount} 程`
+              : `单程 ¥${pickupQuote.perLegFeeText}`;
+          } else {
+            pickupFeeCalcText = pickupQuote.calcText;
+          }
+        } else if (!isDistanceMode) {
+          const flatQuote = buildPickupFeeQuote(storeView, pickupFlags);
+          if (flatQuote.ready) {
+            pickupFeeStandard = `收费标准：${flatQuote.standardText}`;
+          }
+        } else if (isDistanceMode && !pickupFeeStoreLocationMissing) {
+          const perKmSummary = formatPickupPricingSummary(storeView);
+          if (perKmSummary) {
+            pickupFeeStandard = perKmSummary.replace('接送收费：', '收费标准：');
+          }
+        }
       }
 
-      if (pickupQuote && pickupQuote.ready) {
-        pickupFeeStandard = `收费标准：${pickupQuote.standardText}`;
-        if (pickupQuote.mode === 'distance' && pickupQuote.distanceText) {
-          pickupDistanceText = `${pickupQuote.distanceText}（店铺至接送地址直线距离）`;
-        }
-        if (pickupQuote.mode === 'flat') {
-          pickupFeeCalcText = pickupQuote.legCount > 1
-            ? `单程 ¥${pickupQuote.perLegFeeText} × ${pickupQuote.legCount} 程`
-            : `单程 ¥${pickupQuote.perLegFeeText}`;
-        } else {
-          pickupFeeCalcText = pickupQuote.calcText;
-        }
-      } else if (!isDistanceMode) {
-        const flatQuote = buildPickupFeeQuote(storeView, pickupFlags);
-        if (flatQuote.ready) {
-          pickupFeeStandard = `收费标准：${flatQuote.standardText}`;
-        }
-      } else if (isDistanceMode && !pickupFeeStoreLocationMissing) {
-        const perKmSummary = formatPickupPricingSummary(storeView);
-        if (perKmSummary) {
-          pickupFeeStandard = perKmSummary.replace('接送收费：', '收费标准：');
-        }
-      }
+      this.setData({
+        feeReady: breakdown.ready,
+        pickupFeePending,
+        pickupFeeReady,
+        pickupFeeStoreLocationMissing,
+        pickupDrivingDistanceKm: distanceKm != null ? distanceKm : null,
+        pickupDistanceMode: resolvedMode,
+        pickupDistanceError: distanceError || '',
+        totalDisplayReady,
+        days: breakdown.days,
+        daysText: breakdown.daysText,
+        baseFee: breakdown.baseFee,
+        dailyBreakdown: breakdown.dailyBreakdown,
+        chargeSummary: breakdown.chargeSummary,
+        basePrice,
+        basePriceText: formatMoney(basePrice),
+        boardingTotalFee,
+        boardingTotalFeeText: formatMoney(boardingTotalFee),
+        pickupFee,
+        pickupFeeText: formatMoney(pickupFee),
+        pickupFeeStandard,
+        pickupDistanceText,
+        pickupFeeCalcText,
+        pickupFeePendingText,
+        grandTotalFee,
+        grandTotalFeeText: formatMoney(grandTotalFee),
+        totalFee: grandTotalFee,
+        totalFeeText: formatMoney(grandTotalFee)
+      });
+    };
+
+    if (!needsDrivingDistance) {
+      applyFeeUi(null, '', '');
+      return;
     }
 
-    this.setData({
-      feeReady: breakdown.ready,
-      pickupFeePending,
-      pickupFeeReady,
-      pickupFeeStoreLocationMissing,
-      totalDisplayReady,
-      days: breakdown.days,
-      daysText: breakdown.daysText,
-      baseFee: breakdown.baseFee,
-      dailyBreakdown: breakdown.dailyBreakdown,
-      chargeSummary: breakdown.chargeSummary,
-      basePrice,
-      basePriceText: formatMoney(basePrice),
-      boardingTotalFee,
-      boardingTotalFeeText: formatMoney(boardingTotalFee),
-      pickupFee,
-      pickupFeeText: formatMoney(pickupFee),
-      pickupFeeStandard,
-      pickupDistanceText,
-      pickupFeeCalcText,
-      pickupFeePendingText,
-      grandTotalFee,
-      grandTotalFeeText: formatMoney(grandTotalFee),
-      totalFee: grandTotalFee,
-      totalFeeText: formatMoney(grandTotalFee)
-    });
+    if (drivingKm != null && drivingKm !== '') {
+      applyFeeUi(drivingKm, '', pickupDistanceMode || 'driving');
+      return;
+    }
+
+    applyFeeUi(null, '', '');
+    resolveStorePickupDrivingDistance(storeView, pickupLatitude, pickupLongitude)
+      .then((res) => {
+        if (feeToken !== this._feeCalcToken) return;
+        if (!res || !res.success) {
+          applyFeeUi(null, (res && res.errMsg) || '距离计算失败，请重新选择地址', '');
+          return;
+        }
+        applyFeeUi(res.distanceKm, '', res.distanceMode || 'driving');
+      })
+      .catch(() => {
+        if (feeToken !== this._feeCalcToken) return;
+        applyFeeUi(null, '距离计算失败，请重新选择地址', '');
+      });
   },
 
   _validateContact() {
@@ -748,7 +815,9 @@ Page({
         store: storeView,
         ...this._getPickupFlags(),
         pickupLatitude: this.data.pickupLatitude,
-        pickupLongitude: this.data.pickupLongitude
+        pickupLongitude: this.data.pickupLongitude,
+        distanceKm: this.data.pickupDrivingDistanceKm,
+        distanceMode: this.data.pickupDistanceMode || 'driving'
       })
       : 0;
     const boardingFee = baseFee + extrasFee;
@@ -804,7 +873,13 @@ Page({
         basePrice: this.data.basePrice,
         dailyBreakdown: this.data.dailyBreakdown,
         chargeSummary: this.data.chargeSummary,
-        daysText: this.data.daysText
+        daysText: this.data.daysText,
+        pickupDistanceKm: this.data.pickupDrivingDistanceKm != null
+          ? this.data.pickupDrivingDistanceKm
+          : undefined,
+        pickupDistanceMode: storeView.pickupPricingMode === 'distance'
+          ? (this.data.pickupDistanceMode || 'driving')
+          : undefined
       },
       extras: extraList.filter((e) => e.checked).map((e) => e.key),
       needPickup: store.hasPickup ? needPickup : false,

@@ -1,6 +1,7 @@
 const db = require('../db');
 const identity = require('./identity');
 const userFields = require('./userFields');
+const notifyService = require('./notifyService');
 
 function normalizeIsMerchant(value) {
   if (value === true || value === 1) return true;
@@ -352,7 +353,9 @@ async function createOrder(event, openid) {
   );
   await db.insertOne('orders', orderData);
 
-  return { success: true, order: formatOrder(orderData) };
+  const formatted = formatOrder(orderData);
+  notifyService.notifyMerchantNewOrder(formatted).catch(() => {});
+  return { success: true, order: formatted };
 }
 
 async function fetchPetsMap(petIds) {
@@ -479,6 +482,7 @@ async function updateOrder(event, openid) {
   }
 
   const nextStatus = updates.status;
+  const prevStatus = existing.status;
   if (nextStatus && !ORDER_STATUSES.includes(nextStatus)) {
     return { success: false, errMsg: '无效的订单状态' };
   }
@@ -590,6 +594,10 @@ async function updateOrder(event, openid) {
     petDoc = petMap[existing.petId] || null;
   }
   const updatedOrder = formatOrder({ ...existing, ...patch }, petDoc);
+
+  if (patch.status && patch.status !== prevStatus) {
+    notifyService.notifyUserOrderStatus(updatedOrder, prevStatus).catch(() => {});
+  }
 
   return { success: true, order: updatedOrder };
 }
