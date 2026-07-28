@@ -154,14 +154,14 @@
 
 .btn-sign {
   width: 100%;
-  min-height: 96rpx;
+  min-height: 88rpx;
   height: auto;
-  padding: 26rpx 24rpx;
+  padding: 22rpx 32rpx;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1.45;
+  line-height: 1.2;
   text-align: center;
   background: #E98657;
   color: #FFFFFF;
@@ -170,8 +170,7 @@
   border-radius: 12rpx;
   border: none;
   margin: 0;
-  white-space: normal;
-  word-break: break-all;
+  white-space: nowrap;
 }
 .btn-sign::after {
   border: none;

@@ -1,7 +1,7 @@
 const app = getApp();
 const { dedupeDailyLogs } = require('../../../utils/dailyLogUtil');
 const { previewImages, previewVideo } = require('../../../utils/dailyPreview');
-const { resolveVideoUrl } = require('../../../utils/mediaUrl');
+const { resolveVideoUrl, resolveVideoCoverUrl } = require('../../../utils/mediaUrl');
 const { refreshSingleOrder } = require('../../../utils/orderRefresh');
 
 Page({
@@ -52,13 +52,26 @@ Page({
   _setLogs(logs) {
     const sorted = dedupeDailyLogs(logs || []);
     return Promise.all(sorted.map((log) => {
-      if (log.videoUrl || !log.video) {
-        return { ...log, videoUrl: log.videoUrl || '' };
+      const tasks = [];
+      if (!log.videoUrl && log.video) {
+        tasks.push(resolveVideoUrl(log.video).then((videoUrl) => {
+          log.videoUrl = videoUrl || '';
+        }));
       }
-      return resolveVideoUrl(log.video).then((videoUrl) => ({
-        ...log,
-        videoUrl: videoUrl || ''
-      }));
+      return Promise.all(tasks).then(() => {
+        if (!log.videoUrl) {
+          return {
+            ...log,
+            videoUrl: log.videoUrl || '',
+            videoCoverUrl: log.videoCoverUrl || ''
+          };
+        }
+        return resolveVideoCoverUrl(log.videoUrl, log.videoCoverUrl || log.videoCover).then((videoCoverUrl) => ({
+          ...log,
+          videoUrl: log.videoUrl || '',
+          videoCoverUrl: videoCoverUrl || log.videoCoverUrl || ''
+        }));
+      });
     })).then((resolved) => {
       this.setData({ logs: resolved });
     });

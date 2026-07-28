@@ -855,12 +855,29 @@ img { max-width: 100%; display: block; }
 }
 
 .footer-legal {
-  margin: 0;
+  margin: 8px 0 0;
   font-size: 13px;
   font-weight: 600;
+  text-align: center;
 }
 
-.footer-legal a { color: rgba(255, 248, 240, 0.72); }
+.footer-legal a {
+  color: rgba(255, 248, 240, 0.72);
+  text-decoration: none;
+}
+
+.footer-legal a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.footer-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: rgba(255, 248, 240, 0.55);
+}
 
 @media (max-width: 960px) {
   .nav { display: none; }

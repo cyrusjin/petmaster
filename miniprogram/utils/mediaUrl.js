@@ -16,8 +16,24 @@ function resolveVideoUrl(source) {
     return Promise.resolve(cached.url);
   }
 
-  console.warn('[mediaUrl] 仍为 cloud:// 地址，请迁移到 OSS', fileID);
+  console.warn('[mediaUrl] 仍为 cloud:// 地址，请迁移到 https://api.petmaster.me/media', fileID);
   return Promise.resolve(fileID);
+}
+
+function deriveVideoCoverUrl(videoUrl) {
+  const source = (videoUrl || '').trim();
+  if (!source) return '';
+  if (/\.(mp4|mov|m4v|avi|mkv|webm)(\?.*)?$/i.test(source)) {
+    return source.replace(/\.(mp4|mov|m4v|avi|mkv|webm)(\?.*)?$/i, '_cover.jpg');
+  }
+  return '';
+}
+
+function resolveVideoCoverUrl(videoUrl, storedCover) {
+  const cover = (storedCover || '').trim();
+  if (cover) return resolveVideoUrl(cover);
+  const derived = deriveVideoCoverUrl(videoUrl);
+  return derived ? Promise.resolve(derived) : Promise.resolve('');
 }
 
 function resolveVideoUrls(sources) {
@@ -47,5 +63,7 @@ function enrichLogsWithVideoUrls(logs) {
 module.exports = {
   resolveVideoUrl,
   resolveVideoUrls,
+  deriveVideoCoverUrl,
+  resolveVideoCoverUrl,
   enrichLogsWithVideoUrls
 };

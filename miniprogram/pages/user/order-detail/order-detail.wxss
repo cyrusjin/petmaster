@@ -16,14 +16,17 @@
 .order-action-btn {
   flex: 1;
   margin: 0 !important;
-  height: 80rpx !important;
+  min-height: 80rpx !important;
+  height: auto !important;
   font-size: 28rpx !important;
   border-radius: 40rpx !important;
-  padding: 0 !important;
+  padding: 18rpx 24rpx !important;
   box-sizing: border-box !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  white-space: nowrap !important;
+  line-height: 1.2 !important;
 }
 .order-action-btn::after { border: none; }
 .order-action-cancel {

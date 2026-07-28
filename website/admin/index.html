@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商家入驻审核 · 宠大师 PetMaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="admin.css" />
+  <link rel="icon" href="../assets/card/card-pets.png" type="image/png" />
+</head>
+<body class="admin-page">
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="admin-header">
+    <div class="container admin-header-inner">
+      <a class="admin-brand" href="../index.html">
+        <img src="../assets/card/card-pets.png" alt="宠大师" />
+        <span>
+          <strong>宠大师管理后台</strong>
+          <small>商家入驻审核</small>
+        </span>
+      </a>
+      <div class="admin-user">
+        <span id="admin-user"></span>
+        <button class="btn btn-outline btn-sm" id="logout-btn" type="button">退出登录</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="admin-nav">
+    <div class="container admin-nav-inner">
+      <a class="admin-nav-link active" href="index.html">入驻审核</a>
+      <a class="admin-nav-link" href="stores.html">店铺管理</a>
+    </div>
+  </nav>
+
+  <main class="admin-main">
+    <div class="container admin-panel">
+      <div class="admin-toolbar">
+        <div>
+          <h1>待审核申请</h1>
+          <p>审核通过后，商家版小程序将自动更新为已开通状态</p>
+        </div>
+        <button class="btn btn-outline btn-sm" id="refresh-btn" type="button">刷新</button>
+      </div>
+
+      <div id="content">
+        <div class="card admin-loading">加载中...</div>
+      </div>
+    </div>
+  </main>
+
+  <script src="admin.js"></script>
+  <script>
+    if (!PetAdmin.requireAuth()) {
+      throw new Error('redirect');
+    }
+
+    const contentEl = document.getElementById('content');
+    const adminUserEl = document.getElementById('admin-user');
+    let processingId = '';
+
+    adminUserEl.textContent = PetAdmin.getUsername();
+
+    document.getElementById('logout-btn').addEventListener('click', function () {
+      PetAdmin.clearSession();
+      window.location.href = 'login.html';
+    });
+
+    document.getElementById('refresh-btn').addEventListener('click', function () {
+      loadApplications();
+    });
+
+    function renderApplications(applications) {
+      if (!applications.length) {
+        contentEl.innerHTML = '<div class="card admin-empty"><strong>暂无待审核申请</strong><span>有新的商家提交入驻申请后会显示在这里</span></div>';
+        return;
+      }
+
+      contentEl.innerHTML = applications.map(function (item) {
+        const photos = (item.storePhotos || []).map(function (url, index) {
+          return '<img src="' + PetAdmin.escapeHtml(url) + '" alt="店铺照片' + (index + 1) + '" data-url="' + PetAdmin.escapeHtml(url) + '" />';
+        }).join('');
+
+        return [
+          '<article class="card apply-card" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">',
+          '<div class="apply-head">',
+          '<h2>' + PetAdmin.escapeHtml(item.name || '未命名店铺') + '</h2>',
+          '<span class="apply-badge">待审核</span>',
+          '</div>',
+          '<dl class="apply-detail">',
+          '<div class="apply-row"><dt>负责人</dt><dd>' + PetAdmin.escapeHtml(item.legalName || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>联系电话</dt><dd>' + PetAdmin.escapeHtml(item.contactPhone || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>营业地址</dt><dd>' + PetAdmin.escapeHtml(item.address || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>申请人</dt><dd>' + PetAdmin.escapeHtml(item.applicantName || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>申请时间</dt><dd>' + PetAdmin.escapeHtml(item.applyTimeText || '--') + '</dd></div>',
+          photos ? '<div class="apply-row"><dt>店铺照片</dt><dd><div class="apply-photos">' + photos + '</div></dd></div>' : '',
+          '</dl>',
+          '<div class="apply-actions">',
+          '<button class="btn btn-danger btn-sm reject-btn" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">拒绝</button>',
+          '<button class="btn btn-primary btn-sm approve-btn" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">同意开通</button>',
+          '</div>',
+          '</article>'
+        ].join('');
+      }).join('');
+
+      contentEl.querySelectorAll('.approve-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const storeId = btn.getAttribute('data-id');
+          if (!storeId || processingId) return;
+          if (!window.confirm('确定同意该商家入驻并开通商家端权限？')) return;
+          review(storeId, 'approve');
+        });
+      });
+
+      contentEl.querySelectorAll('.reject-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const storeId = btn.getAttribute('data-id');
+          if (!storeId || processingId) return;
+          const reason = window.prompt('请输入拒绝原因（可选）', '资料不完整，请修改后重新申请');
+          if (reason === null) return;
+          review(storeId, 'reject', reason);
+        });
+      });
+
+      contentEl.querySelectorAll('.apply-photos img').forEach(function (img) {
+        img.addEventListener('click', function () {
+          window.open(img.getAttribute('data-url'), '_blank');
+        });
+      });
+    }
+
+    async function loadApplications() {
+      contentEl.innerHTML = '<div class="card admin-loading">加载中...</div>';
+      try {
+        const data = await PetAdmin.api('/api/admin/applications');
+        if (!data.success) throw new Error(data.errMsg || '加载失败');
+        renderApplications(data.applications || []);
+      } catch (err) {
+        contentEl.innerHTML = '<div class="card admin-empty"><strong>加载失败</strong><span>' + PetAdmin.escapeHtml(err.message) + '</span></div>';
+      }
+    }
+
+    async function review(storeId, decision, rejectReason) {
+      processingId = storeId;
+      contentEl.querySelectorAll('button').forEach(function (btn) {
+        btn.disabled = true;
+      });
+
+      try {
+        const data = await PetAdmin.api('/api/admin/applications/review', {
+          method: 'POST',
+          body: JSON.stringify({
+            store_id: storeId,
+            decision: decision,
+            rejectReason: rejectReason || ''
+          })
+        });
+        if (!data.success) throw new Error(data.errMsg || '操作失败');
+        alert(decision === 'approve' ? '已开通商家权限' : '已拒绝该申请');
+        await loadApplications();
+      } catch (err) {
+        alert(err.message || '操作失败');
+        contentEl.querySelectorAll('button').forEach(function (btn) {
+          btn.disabled = false;
+        });
+      } finally {
+        processingId = '';
+      }
+    }
+
+    loadApplications();
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 const app = getApp();
-const util = require('../../../utils/util');
 const datePicker = require('../../../utils/datePicker');
+const { ensureLogin } = require('../../../utils/api');
 const {
   PET_TYPES,
   validatePetForm,
@@ -52,7 +52,6 @@ Page({
   },
 
   onLoad(opts) {
-    const today = datePicker.clampDateString(util.formatDate(new Date()));
     if (opts.id) {
       const pet = app.getPets().find((p) => p.id === opts.id);
       if (pet) {
@@ -61,16 +60,12 @@ Page({
         this.setData({
           ...pet,
           ...health,
-          petType,
-          dewormDate: health.dewormDate || today
+          petType
         });
         return;
       }
     }
-    this.setData({
-      ...createDefaultHealthFields(),
-      dewormDate: today
-    });
+    this.setData(createDefaultHealthFields());
   },
 
   onChoosePhoto() {
@@ -156,9 +151,10 @@ Page({
     if (this.data.saving) return;
 
     this.setData({ saving: true });
-    wx.showLoading({ title: '保存中' });
+    wx.showLoading({ title: '保存中', mask: true });
 
-    uploadPetPhoto(this.data.photo)
+    ensureLogin()
+      .then(() => uploadPetPhoto(this.data.photo))
       .then((photo) => {
         const payload = buildPetPayload({ ...this.data, photo });
         return app.savePet(payload);
@@ -172,7 +168,8 @@ Page({
         wx.hideLoading();
         wx.showToast({
           title: (error && error.message) || '保存失败',
-          icon: 'none'
+          icon: 'none',
+          duration: 3000
         });
       })
       .finally(() => {

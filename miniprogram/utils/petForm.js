@@ -1,5 +1,5 @@
 const { RECEPTION_RANGE_OPTIONS } = require('./receptionRange');
-const { uploadLocalImage } = require('./cloudUpload');
+const { uploadLocalImage } = require('./upload');
 const { clampDateString } = require('./datePicker');
 
 const PET_TYPES = RECEPTION_RANGE_OPTIONS.map((item) => item.value);

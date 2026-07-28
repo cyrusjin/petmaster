@@ -1,8 +1,8 @@
-const { callCloudFunction } = require('./cloudCall');
+const { callApiService } = require('./api');
 const { dedupeDailyLogs } = require('./dailyLogUtil');
 
 function callDailyService(action, data = {}) {
-  return callCloudFunction('dailyService', { action, ...data });
+  return callApiService('dailyService', { action, ...data });
 }
 
 function saveDailyLog(log) {
@@ -25,13 +25,13 @@ function initDatabase() {
   return callDailyService('initDatabase');
 }
 
-/** 仅从云端拉取，不读写本地 storage */
+/** 仅从服务端拉取，不读写本地 storage */
 function fetchDailyLogs(orderId) {
   if (!orderId) return Promise.resolve([]);
   return listDailyLogs(orderId)
     .then((res) => (res.success && Array.isArray(res.logs) ? res.logs : []))
     .catch((err) => {
-      console.error('[打卡] 拉取云端记录失败', err);
+      console.error('[打卡] 拉取服务端记录失败', err);
       return [];
     });
 }
@@ -56,7 +56,7 @@ function fetchDailyLogsForOrders(orderIds) {
       return [];
     })
     .catch((err) => {
-      console.error('[打卡] 批量拉取云端记录失败，改逐单拉取', err);
+      console.error('[打卡] 批量拉取服务端记录失败，改逐单拉取', err);
       return fetchOneByOne();
     });
 }

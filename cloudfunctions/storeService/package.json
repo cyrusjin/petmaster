@@ -1,9 +1,0 @@
-{
-  "name": "storeService",
-  "version": "1.0.0",
-  "description": "店铺信息与分享",
-  "main": "index.js",
-  "dependencies": {
-    "wx-server-sdk": "~2.4.0"
-  }
-}

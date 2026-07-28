@@ -3,6 +3,8 @@ const cors = require('cors');
 const config = require('./config');
 const { connectDb } = require('./db');
 const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
+const oss = require('./oss');
 const {
   storeRouter,
   orderRouter,
@@ -15,6 +17,8 @@ async function main() {
   await connectDb();
   console.log('[db] connected');
 
+  oss.ensureMediaRoot();
+
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '2mb' }));
@@ -23,7 +27,14 @@ async function main() {
     res.json({ ok: true, time: Date.now() });
   });
 
+  // 本地媒体静态访问：https://api.petmaster.me/media/...
+  app.use('/media', express.static(config.media.root, {
+    maxAge: '7d',
+    fallthrough: true
+  }));
+
   app.use('/api/auth', authRouter);
+  app.use('/api/admin', adminRouter);
   app.use('/api/user', authRouter);
   app.use('/api/store', storeRouter);
   app.use('/api/order', orderRouter);

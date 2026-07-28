@@ -1,6 +1,6 @@
 # Petmaster API（阿里云自建后端）
 
-Express + MongoDB + 阿里云 OSS，替代原微信云开发云函数 / 云数据库 / 云存储。
+Express + MongoDB + 本地磁盘媒体（`/media`），替代原微信云开发云函数 / 云数据库 / 云存储。
 
 ## 本地开发
 
@@ -25,7 +25,9 @@ npm start
 | POST | `/api/order` | 原 orderService |
 | POST | `/api/pet` | 原 petService |
 | POST | `/api/daily` | 原 dailyService |
-| POST | `/api/upload/sign` | OSS PostObject 签名 |
+| POST | `/api/upload/sign` | 获取本地上传凭证 |
+| POST | `/api/upload` | 小程序直传文件（multipart，需登录） |
+| GET | `/media/*` | 本地媒体静态访问 |
 
 鉴权：`Authorization: Bearer <token>`
 

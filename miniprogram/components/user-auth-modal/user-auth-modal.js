@@ -95,9 +95,9 @@ Component({
       app.updateProfile({ nickName, phone })
         .then(() => {
           wx.hideLoading();
-          if (app.globalData.lastCloudError) {
+          if (app.globalData.lastApiError) {
             wx.showToast({
-              title: app.globalData.lastCloudError,
+              title: app.globalData.lastApiError,
               icon: 'none',
               duration: 3000
             });

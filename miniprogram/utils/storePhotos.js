@@ -1,29 +1,7 @@
-const { uploadFileToOss } = require('./cloudUpload');
+const { uploadFileToServer } = require('./upload');
+const { isCloudFileId, isLocalTempPath, isRemotePhoto } = require('./mediaPath');
 
 const MAX_STORE_PHOTOS = 6;
-
-function isCloudFileId(url) {
-  return typeof url === 'string' && (
-    url.startsWith('cloud://')
-    || url.startsWith('https://')
-    || url.startsWith('http://')
-  ) && !isLocalTempPath(url);
-}
-
-function isLocalTempPath(url) {
-  if (!url || typeof url !== 'string') return false;
-  const text = url.trim();
-  return text.startsWith('wxfile://')
-    || text.startsWith('http://tmp/')
-    || text.startsWith('http://usr/')
-    || (text.startsWith('/') && !text.startsWith('//'));
-}
-
-function isRemotePhoto(url) {
-  if (!url || typeof url !== 'string') return false;
-  if (isLocalTempPath(url)) return false;
-  return url.startsWith('cloud://') || url.startsWith('https://') || url.startsWith('http://');
-}
 
 function normalizeStorePhotos(photos) {
   if (!Array.isArray(photos)) return [];
@@ -44,7 +22,7 @@ function uploadStorePhotos(photos, fallbackPhotos) {
 
     if (isLocalTempPath(photo)) {
       const ext = (photo.split('.').pop() || 'jpg').split('?')[0];
-      return uploadFileToOss(photo, 'store-photos', ext).then((url) => {
+      return uploadFileToServer(photo, 'store-photos', ext).then((url) => {
         if (!isRemotePhoto(url)) {
           return Promise.reject(new Error('图片上传失败'));
         }
@@ -71,7 +49,7 @@ function uploadStoreLogo(logo, fallbackLogo) {
   if (isRemotePhoto(logo) && !isLocalTempPath(logo)) return Promise.resolve(logo);
   if (isLocalTempPath(logo)) {
     const ext = (logo.split('.').pop() || 'png').split('?')[0];
-    return uploadFileToOss(logo, 'store-logos', ext).then((url) => {
+    return uploadFileToServer(logo, 'store-logos', ext).then((url) => {
       if (!isRemotePhoto(url)) {
         return Promise.reject(new Error('店铺头像上传失败，请重试'));
       }

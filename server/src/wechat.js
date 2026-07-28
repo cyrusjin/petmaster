@@ -1,24 +1,41 @@
 const axios = require('axios');
 const config = require('./config');
 
-let cachedToken = { value: '', expireAt: 0 };
+const tokenCache = {
+  user: { value: '', expireAt: 0 },
+  merchant: { value: '', expireAt: 0 }
+};
 
-async function code2Session(code) {
+function normalizeClient(client) {
+  return client === 'merchant' ? 'merchant' : 'user';
+}
+
+function getAppCredentials(client = 'user') {
+  const key = normalizeClient(client);
+  const app = (config.wxApps && config.wxApps[key]) || {};
+  const appId = app.appId || config.wxAppId;
+  const secret = app.secret || config.wxSecret;
+  return { client: key, appId, secret };
+}
+
+async function code2Session(code, client = 'user') {
+  const { client: appClient, appId, secret } = getAppCredentials(client);
   if (config.devMockWechat) {
-    // 开发联调固定 openid，避免每次 wx.login 都变成新用户
     return {
-      openid: 'dev_openid_petmaster',
-      session_key: 'mock_session_key'
+      openid: appClient === 'merchant' ? 'dev_openid_merchant' : 'dev_openid_petmaster',
+      unionid: 'dev_unionid_petmaster',
+      session_key: 'mock_session_key',
+      client: appClient
     };
   }
-  if (!config.wxAppId || !config.wxSecret) {
-    throw new Error('未配置 WX_APPID / WX_SECRET');
+  if (!appId || !secret) {
+    throw new Error(`未配置 ${appClient === 'merchant' ? 'WX_MERCHANT_APPID/WX_MERCHANT_SECRET' : 'WX_APPID/WX_SECRET'}`);
   }
   const url = 'https://api.weixin.qq.com/sns/jscode2session';
   const { data } = await axios.get(url, {
     params: {
-      appid: config.wxAppId,
-      secret: config.wxSecret,
+      appid: appId,
+      secret,
       js_code: code,
       grant_type: 'authorization_code'
     },
@@ -27,36 +44,43 @@ async function code2Session(code) {
   if (!data || data.errcode) {
     throw new Error((data && (data.errmsg || String(data.errcode))) || 'code2session 失败');
   }
-  return data;
+  return {
+    openid: data.openid,
+    unionid: data.unionid || '',
+    session_key: data.session_key || '',
+    client: appClient
+  };
 }
 
-async function getAccessToken() {
-  if (cachedToken.value && cachedToken.expireAt > Date.now()) {
-    return cachedToken.value;
+async function getAccessToken(client = 'user') {
+  const { client: appClient, appId, secret } = getAppCredentials(client);
+  const cached = tokenCache[appClient] || { value: '', expireAt: 0 };
+  if (cached.value && cached.expireAt > Date.now()) {
+    return cached.value;
   }
-  if (!config.wxAppId || !config.wxSecret) {
-    throw new Error('未配置 WX_APPID / WX_SECRET');
+  if (!appId || !secret) {
+    throw new Error(`未配置 ${appClient === 'merchant' ? 'WX_MERCHANT_APPID/WX_MERCHANT_SECRET' : 'WX_APPID/WX_SECRET'}`);
   }
   const { data } = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
     params: {
       grant_type: 'client_credential',
-      appid: config.wxAppId,
-      secret: config.wxSecret
+      appid: appId,
+      secret
     },
     timeout: 10000
   });
   if (!data || !data.access_token) {
     throw new Error((data && data.errmsg) || '获取 access_token 失败');
   }
-  cachedToken = {
+  tokenCache[appClient] = {
     value: data.access_token,
     expireAt: Date.now() + Math.max((data.expires_in || 7200) - 120, 60) * 1000
   };
-  return cachedToken.value;
+  return tokenCache[appClient].value;
 }
 
-async function getPhoneNumber(code) {
-  const accessToken = await getAccessToken();
+async function getPhoneNumber(code, client = 'user') {
+  const accessToken = await getAccessToken(client);
   const { data } = await axios.post(
     `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${accessToken}`,
     { code },
@@ -68,8 +92,14 @@ async function getPhoneNumber(code) {
   return (data.phone_info && data.phone_info.phoneNumber) || '';
 }
 
-async function getUnlimitedQrCode({ scene, page, envVersion = 'trial', width = 430 }) {
-  const accessToken = await getAccessToken();
+async function getUnlimitedQrCode({
+  scene,
+  page,
+  envVersion = 'trial',
+  width = 430,
+  client = 'user'
+}) {
+  const accessToken = await getAccessToken(client);
   const { data } = await axios.post(
     `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${accessToken}`,
     {
@@ -97,6 +127,8 @@ async function getUnlimitedQrCode({ scene, page, envVersion = 'trial', width = 4
 }
 
 module.exports = {
+  normalizeClient,
+  getAppCredentials,
   code2Session,
   getAccessToken,
   getPhoneNumber,

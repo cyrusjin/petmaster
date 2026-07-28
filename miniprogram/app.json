@@ -1,10 +1,10 @@
 {
   "pages": [
-    "pages/merchant/tab-daily/tab-daily",
-    "pages/merchant/tab-statistics/tab-statistics",
     "pages/index/index",
     "pages/orders/orders",
     "pages/daily/daily",
+    "pages/merchant/tab-daily/tab-daily",
+    "pages/merchant/tab-statistics/tab-statistics",
     "pages/merchant/apply/apply",
     "pages/merchant/tab-store/tab-store",
     "pages/user/login/login",
@@ -81,10 +81,13 @@
   "lazyCodeLoading": "requiredComponents",
   "permission": {
     "scope.userLocation": {
-      "desc": "用于在地图上选择店铺营业地址"
+      "desc": "用于选择寄养地址与接送位置"
     }
   },
   "requiredPrivateInfos": [
     "chooseLocation"
+  ],
+  "navigateToMiniProgramAppIdList": [
+    "wx327ccf77cdedc252"
   ]
 }

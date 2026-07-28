@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container has-tab-bar">
   <view wx:if="{{logs.length > 0}}">
     <view class="daily-item card" wx:for="{{logs}}" wx:key="id" wx:for-index="logIdx">
       <view class="flex-between mb-16">
@@ -30,11 +30,17 @@
         </view>
         <view
           wx:if="{{item.videoUrl || item.video}}"
-          class="daily-video-thumb"
+          class="daily-video-thumb {{item.videoCoverUrl ? 'has-cover' : ''}}"
           catchtap="onPreviewVideo"
           data-log-index="{{logIdx}}"
         >
-          <text class="video-play-icon">▶</text>
+          <cached-image
+            wx:if="{{item.videoCoverUrl}}"
+            src="{{item.videoCoverUrl}}"
+            mode="aspectFill"
+            custom-class="daily-video-cover"
+          />
+          <view class="video-play-badge">▶</view>
         </view>
       </view>
       <text wx:if="{{item.notifyOwner || item.isAbnormal}}" class="tag tag-orange" style="margin-top:12rpx;">已标记通知主人</text>

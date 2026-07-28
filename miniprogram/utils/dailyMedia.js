@@ -1,5 +1,6 @@
-const { isRemotePhoto } = require('./storePhotos');
-const { uploadFileToOss } = require('./cloudUpload');
+const { isRemotePhoto, isLocalTempPath } = require('./storePhotos');
+const { uploadFileToServer } = require('./upload');
+const { deriveVideoCoverUrl } = require('./mediaUrl');
 
 function compressImage(filePath) {
   if (!filePath || isRemotePhoto(filePath)) {
@@ -16,11 +17,11 @@ function compressImage(filePath) {
   });
 }
 
-function uploadToCloud(localPath, folder) {
+function uploadToCloud(localPath, folder, forcedExt) {
   if (!localPath) return Promise.resolve('');
   if (isRemotePhoto(localPath)) return Promise.resolve(localPath);
-  const ext = (localPath.split('.').pop() || 'jpg').split('?')[0];
-  return uploadFileToOss(localPath, folder, ext)
+  const ext = forcedExt || (localPath.split('.').pop() || 'jpg').split('?')[0];
+  return uploadFileToServer(localPath, folder, ext)
     .catch((err) => {
       const msg = (err && (err.errMsg || err.message)) || '文件上传失败';
       return Promise.reject(new Error(msg));
@@ -48,28 +49,53 @@ function uploadDailyVideo(videoPath, storeId, orderId) {
   return uploadToCloud(videoPath, folder);
 }
 
-function isUploadedUrl(url) {
-  return typeof url === 'string' && (
-    url.startsWith('https://')
-    || url.startsWith('http://')
-    || url.startsWith('cloud://')
-  );
+function uploadDailyVideoCover(thumbPath, storeId, orderId) {
+  if (!thumbPath) return Promise.resolve('');
+  const folder = buildFolder(storeId, orderId);
+  return compressImage(thumbPath)
+    .then((compressed) => uploadToCloud(compressed, folder, 'jpg'));
 }
 
-function uploadDailyMedia(images, video, storeId, orderId) {
+function isVideoFilePath(localPath) {
+  return /\.(mp4|mov|m4v|avi|mkv|webm)(\?|$)/i.test(localPath || '');
+}
+
+function shouldUploadVideoCover(videoPath, thumbPath) {
+  if (!videoPath || !thumbPath || thumbPath === videoPath) return false;
+  return !isVideoFilePath(thumbPath);
+}
+
+function isUploadedUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (isLocalTempPath(url)) return false;
+  return url.startsWith('https://')
+    || url.startsWith('http://')
+    || url.startsWith('cloud://');
+}
+
+function uploadDailyMedia(images, video, storeId, orderId, videoThumb) {
   return uploadDailyImages(images, storeId, orderId)
     .then((uploadedImages) => {
       const cloudImages = uploadedImages.filter((item) => isUploadedUrl(item));
       if ((images || []).filter(Boolean).length && !cloudImages.length) {
         return Promise.reject(new Error('图片上传失败，请检查网络后重试'));
       }
-      return uploadDailyVideo(video, storeId, orderId).then((uploadedVideo) => {
+      return Promise.all([
+        uploadDailyVideo(video, storeId, orderId),
+        video && shouldUploadVideoCover(video, videoThumb)
+          ? uploadDailyVideoCover(videoThumb, storeId, orderId)
+          : Promise.resolve('')
+      ]).then(([uploadedVideo, uploadedCover]) => {
         if (video && uploadedVideo && !isUploadedUrl(uploadedVideo)) {
           return Promise.reject(new Error('视频上传失败，请检查网络后重试'));
         }
+        const safeVideo = uploadedVideo && isUploadedUrl(uploadedVideo) ? uploadedVideo : '';
+        const safeCover = uploadedCover && isUploadedUrl(uploadedCover) ? uploadedCover : '';
+        const fallbackCover = safeCover || (safeVideo ? deriveVideoCoverUrl(safeVideo) : '');
         return {
           images: cloudImages,
-          video: uploadedVideo && isUploadedUrl(uploadedVideo) ? uploadedVideo : ''
+          video: safeVideo,
+          videoCover: fallbackCover && isUploadedUrl(fallbackCover) ? fallbackCover : ''
         };
       });
     });
@@ -79,5 +105,6 @@ module.exports = {
   compressImage,
   uploadDailyImages,
   uploadDailyVideo,
+  uploadDailyVideoCover,
   uploadDailyMedia
 };

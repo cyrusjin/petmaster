@@ -5,11 +5,21 @@
 ## 1. 服务器准备
 
 1. 安全组 / 防火墙放行：`22`、`80`、`443`
-2. 域名 A 记录指向服务器公网 IP
+2. 域名 A 记录指向服务器公网 IP（官网 `petmaster.me` / `www`，API `api.petmaster.me`）
 3. 完成 ICP 备案（大陆服务器对外提供 HTTPS 给小程序必须备案）
-4. 开通 OSS，创建 Bucket，创建 RAM 子账号并授予 OSS 权限
+4. 媒体文件默认存服务器本地磁盘（`MEDIA_ROOT`），小程序 uploadFile/downloadFile 域名填 `https://api.petmaster.me`
 
-## 2. 安装基础软件
+## 2. 双小程序凭证
+
+| 变量 | 说明 |
+|------|------|
+| `WX_APPID` / `WX_SECRET` | 宠主端小程序 |
+| `WX_MERCHANT_APPID` / `WX_MERCHANT_SECRET` | 商家端小程序 |
+
+登录接口：`POST /api/auth/login`，body 带 `client: "user" | "merchant"`。  
+两端 openid 不同，服务端用 UnionID / 手机号 / `openids.*` 对齐到同一业务用户。
+
+## 3. 安装基础软件
 
 ```bash
 # Node.js 20
@@ -28,30 +38,21 @@ sudo npm i -g pm2
 
 确认 MongoDB 仅监听 `127.0.0.1`，不要对公网开放。
 
-## 3. 部署代码
+## 4. 部署代码
 
 ```bash
-# 上传 server/ 目录到服务器，例如：
 cd /opt
 sudo mkdir -p petmaster && sudo chown $USER:$USER petmaster
-# scp / rsync 将本地 server/ 同步到 /opt/petmaster/server
+# 将本地 server/ 同步到 /opt/petmaster/server
 
 cd /opt/petmaster/server
 cp .env.example .env
-# 编辑 .env：填入 MONGO_URI、JWT_SECRET、WX_APPID、WX_SECRET、OSS_*
+# 编辑 .env：填入 MONGO_URI、JWT_SECRET、WX_*、MEDIA_*
+mkdir -p /opt/petmaster/media
 npm install --production
 ```
 
-`.env` 关键字段：
-
-| 变量 | 说明 |
-|------|------|
-| `MONGO_URI` | 如 `mongodb://127.0.0.1:27017/petmaster` |
-| `JWT_SECRET` | 长随机串 |
-| `WX_APPID` / `WX_SECRET` | 小程序凭证 |
-| `OSS_*` | 阿里云 OSS 配置 |
-
-## 4. 启动 API
+## 5. 启动 API
 
 ```bash
 cd /opt/petmaster/server
@@ -64,65 +65,54 @@ pm2 startup
 
 ```bash
 curl http://127.0.0.1:3000/health
+curl https://api.petmaster.me/health
 ```
 
-## 5. Nginx + HTTPS
+## 6. Nginx + HTTPS
 
-备案通过后，在阿里云申请免费 SSL，或使用 certbot。
-
-示例 Nginx 配置（`/etc/nginx/conf.d/petmaster.conf`）：
-
-```nginx
-server {
-    listen 80;
-    server_name api.example.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name api.example.com;
-
-    ssl_certificate     /etc/nginx/ssl/api.example.com.pem;
-    ssl_certificate_key /etc/nginx/ssl/api.example.com.key;
-
-    client_max_body_size 20m;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+推荐使用 acme.sh（Let's Encrypt）：
 
 ```bash
-sudo nginx -t && sudo systemctl reload nginx
+curl -fsSL https://get.acme.sh | sh -s email=admin@petmaster.me
+~/.acme.sh/acme.sh --issue -d petmaster.me -d www.petmaster.me -d api.petmaster.me -w /var/www/petmaster --server letsencrypt
+~/.acme.sh/acme.sh --install-cert -d petmaster.me --ecc \
+  --key-file /etc/nginx/ssl/petmaster.me.key \
+  --fullchain-file /etc/nginx/ssl/petmaster.me.pem \
+  --reloadcmd 'nginx -s reload'
 ```
 
-## 6. 小程序配置
+Nginx：`api.petmaster.me` 反代到 `127.0.0.1:3000`；官网域名托管静态站点（含 `website/admin/` 管理后台）。
 
-1. 修改 [`miniprogram/config/cloud.js`](../../miniprogram/config/cloud.js) 中 `API_BASE_URL` 为 `https://api.example.com`
-2. 微信公众平台 → 开发管理 → 服务器域名：
-   - request 合法域名：`https://api.example.com`
-   - uploadFile / downloadFile 合法域名：OSS 域名（如 `https://your-bucket.oss-cn-hangzhou.aliyuncs.com`）
-3. 开发阶段可勾选「不校验合法域名」，用局域网 IP 联调
+## 7. 官网管理后台（商家入驻审核）
 
-## 7. OSS 跨域（CORS）
+1. 将 `website/` 同步到 Nginx 静态目录（如 `/var/www/petmaster`）
+2. 管理入口：`https://petmaster.me/admin/login.html`
+3. 在 `.env` 配置管理员账号（逗号分隔，格式 `用户名:密码`）：
 
-Bucket → 跨域设置，允许小程序上传：
+```bash
+ADMIN_ACCOUNTS=jinsen:你的密码,reviewer:你的密码
+ADMIN_JWT_EXPIRES_IN=8h
+```
 
-- 来源：`*`（或具体域名）
-- Methods：`GET, POST, PUT, HEAD`
-- Headers：`*`
-- 暴露 Headers：`ETag, x-oss-request-id`
+4. 审核 API（需 admin JWT）：
+   - `POST /api/admin/login`
+   - `GET /api/admin/applications`
+   - `POST /api/admin/applications/review`
 
-## 8. 数据迁移（可选）
+审核通过后，商家端小程序下次拉取用户信息时会同步 `merchantStatus: approved`。
+
+## 8. 小程序配置
+
+1. 宠主端 / 商家端 `config/api.js` 中 `API_BASE_URL = 'https://api.petmaster.me'`
+2. 微信公众平台 → 开发管理 → 服务器域名（**两个小程序都要配**）：
+   - request 合法域名：`https://api.petmaster.me`
+   - uploadFile / downloadFile 合法域名：`https://api.petmaster.me`
+3. 两端绑定同一微信开放平台账号，可自动拿到 UnionID 打通身份
+
+## 9. 本地媒体目录
+
+默认路径 `/opt/petmaster/media`，经 API 静态路由 `/media` 对外访问。注意磁盘容量与备份。
+
+## 10. 数据迁移（可选）
 
 见 [`docs/DATA_MIGRATION.md`](./DATA_MIGRATION.md)。
-
-## 9. 回滚
-
-稳定前可保留微信云开发环境。若需回滚，将小程序改回 `wx.cloud.callFunction` 并恢复云环境 ID 即可。

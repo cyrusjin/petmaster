@@ -2,7 +2,7 @@ const { isStoreOpenForUsers } = require('./storeStatus');
 const { formatReceptionRangeText, normalizeReceptionRange } = require('./receptionRange');
 const { normalizeDepartureCharge } = require('./billing');
 const { formatLocationAddress } = require('./location');
-const { resolveStoreDisplayUrls, isCloudFileId } = require('./cloudFile');
+const { resolveStoreDisplayUrls, isCloudFileId } = require('./mediaResolve');
 const { normalizeWeightPricing } = require('./weightPricing');
 const { normalizeRoomPricing } = require('./roomPricing');
 const { attachStoreDisplayNo } = require('./displayNo');
@@ -91,9 +91,10 @@ function getExtraServiceList(rules) {
 function prepareUserStoreView(store) {
   const view = buildUserStoreView(store);
   if (!view) return Promise.resolve(null);
-  const hasHttpsMedia = (url) => typeof url === 'string' && url.startsWith('https://');
+  const hasHttpMedia = (url) => typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'));
   const photosOk = !(view.storePhotos || []).some((url) => isCloudFileId(url));
-  const logoOk = !view.logo || hasHttpsMedia(view.logo);
+  const logoOk = !view.logo || hasHttpMedia(view.logo);
+  // 已是 http(s) 的媒体直接展示，由 cached-image 异步缓存，不阻塞首页 setData
   if (photosOk && logoOk) {
     return Promise.resolve(view);
   }

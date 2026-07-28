@@ -23,9 +23,10 @@
 
 .auth-phone-btn {
   width: 100%;
-  height: 80rpx;
+  min-height: 80rpx;
+  height: auto;
   margin: 0;
-  padding: 0;
+  padding: 18rpx 24rpx;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -36,6 +37,8 @@
   font-size: 28rpx;
   color: #E98657;
   font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .auth-phone-btn::after {

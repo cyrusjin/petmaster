@@ -1,5 +1,6 @@
 const db = require('../db');
 const oss = require('../oss');
+const identity = require('./identity');
 
 const PET_TYPES = ['小型犬', '中型犬', '大型犬', '猫咪', '其他'];
 const YES_NO_VALUES = ['是', '否'];
@@ -152,8 +153,7 @@ function buildPetData(pet, ownerOpenid) {
 }
 
 async function getUserDoc(openid) {
-  const data = await db.findMany('users', { openid }, { limit: 1 });
-  return data[0] || null;
+  return identity.findPrimaryUserByOpenid(openid);
 }
 
 async function addPetIdToUser(openid, petId) {

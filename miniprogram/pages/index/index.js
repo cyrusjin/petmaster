@@ -1,17 +1,24 @@
 const app = getApp();
 const { guardUserTabPage } = require('../../utils/shell');
-const { buildStoreShareConfig, buildTimelineShareConfig, enableStoreShareMenu, resolveShareStoreId } = require('../../utils/storeShare');
+const { buildStoreShareConfig, buildTimelineShareConfig, resolveShareStoreId } = require('../../utils/storeShare');
 const storeDebug = require('../../utils/storeDebug');
 const { refreshUserOrders } = require('../../utils/orderRefresh');
+const { resolveEntryStoreId, enterStoreAndRefresh } = require('../../utils/storeEntry');
 const { formatOrderCreateTime } = require('../../utils/util');
+const { isAuthorizedNickName, getDisplayNickName } = require('../../utils/userAuth');
 
 Page({
   data: {
     userInfo: {},
+    displayNickName: '小主',
+    needsNickName: false,
+    nickNameInput: '',
     currentStore: null,
     boardingPets: [],
     petsCount: 0,
-    primaryPet: null
+    previewPets: [],
+    petsMoreCount: 0,
+    petPreviewSize: 'single'
   },
 
   _syncUserTabBar(index) {
@@ -25,8 +32,33 @@ Page({
     wx.setNavigationBarTitle({ title: name || '宠物寄养' });
   },
 
+  _getEntryContext() {
+    const enterOptions = wx.getEnterOptionsSync ? wx.getEnterOptionsSync() : {};
+    const launchOptions = wx.getLaunchOptionsSync ? wx.getLaunchOptionsSync() : {};
+    const storeId = resolveEntryStoreId(app, enterOptions)
+      || resolveEntryStoreId(app, launchOptions);
+    return { storeId, enterOptions, launchOptions };
+  },
+
+  _applyStoreEntry(storeId, options) {
+    if (!storeId) return Promise.resolve();
+    if (app.shouldIgnoreShareEntry && app.shouldIgnoreShareEntry()) {
+      storeDebug.log('首页 忽略客人店铺入口', { storeId });
+      return refreshUserOrders(app, { force: false }).then(() => this._refreshPage());
+    }
+    if (this._storeEntryPromise && this._storeEntryId === storeId) {
+      return this._storeEntryPromise;
+    }
+    this._storeEntryId = storeId;
+    this._storeEntryPromise = enterStoreAndRefresh(app, storeId, options)
+      .then(() => this._refreshPage())
+      .finally(() => {
+        this._storeEntryPromise = null;
+      });
+    return this._storeEntryPromise;
+  },
+
   onLoad(options) {
-    enableStoreShareMenu();
     storeDebug.logEntryOptions('首页 onLoad', options);
 
     const sceneStoreId = options.scene ? decodeURIComponent(String(options.scene)) : '';
@@ -38,15 +70,14 @@ Page({
       resolved: storeId || '(无)'
     });
 
+    // 先用缓存铺屏，避免等网络时白屏
+    this._refreshPageFromCache();
+
     if (storeId) {
-      if (app.shouldIgnoreShareEntry && app.shouldIgnoreShareEntry()) {
-        storeDebug.logStoreState('首页 onLoad 商家身份忽略客人链接', app);
-        return;
-      }
-      app.enterUserStore(storeId).then(() => this._refreshPage());
-    } else {
-      storeDebug.logStoreState('首页 onLoad', app);
+      this._applyStoreEntry(storeId, { query: options });
+      return;
     }
+    storeDebug.logStoreState('首页 onLoad', app);
   },
 
   onShow() {
@@ -54,38 +85,35 @@ Page({
     storeDebug.log('首页 onShow');
     if (guardUserTabPage()) return;
 
+    // 始终先渲染缓存，再静默刷新
     this._refreshPageFromCache();
 
-    const enterOptions = wx.getEnterOptionsSync ? wx.getEnterOptionsSync() : {};
-    const launchOptions = wx.getLaunchOptionsSync ? wx.getLaunchOptionsSync() : {};
-    const entryStoreId = app.extractStoreIdFromOptions(enterOptions)
-      || app.extractStoreIdFromOptions(launchOptions);
-
-    if (entryStoreId) {
-      if (app.shouldIgnoreShareEntry && app.shouldIgnoreShareEntry()) {
-        storeDebug.log('首页 onShow 商家身份忽略客人链接', { entryStoreId });
-        return refreshUserOrders(app, { force: false }).then(() => {
-          this._refreshPage();
-        });
-      }
-      storeDebug.log('首页 onShow 检测到 store_id', { entryStoreId });
-      app.enterUserStore(entryStoreId).then(() => this._refreshPage());
+    const { storeId, enterOptions } = this._getEntryContext();
+    if (storeId) {
+      storeDebug.log('首页 onShow 检测到 store_id', { storeId });
+      this._applyStoreEntry(storeId, enterOptions);
       return;
     }
 
     app.ensureCloudAndLogin({ silent: true }).then(() => {
       if (guardUserTabPage()) return;
       if (app.isUserClientMode && app.isUserClientMode()) {
-        const storeId = app.getStoreId();
-        if (storeId && !app.getCurrentStore()) {
-          return app.bindStore(storeId, { syncUser: false })
-            .then(() => refreshUserOrders(app, { force: false }))
+        const cachedStoreId = app.getStoreId();
+        if (cachedStoreId && !app.getCurrentStore()) {
+          return app.bindStore(cachedStoreId, { syncUser: false, force: false })
+            .then(() => Promise.all([
+              refreshUserOrders(app, { force: false, skipDailyLogs: true }),
+              app.loadPets({ force: false })
+            ]))
             .finally(() => {
               this._refreshPage();
             });
         }
       }
-      return refreshUserOrders(app, { force: false }).then(() => {
+      return Promise.all([
+        refreshUserOrders(app, { force: false, skipDailyLogs: true }),
+        app.loadPets({ force: false })
+      ]).then(() => {
         this._refreshPage();
       });
     });
@@ -105,8 +133,94 @@ Page({
       .finally(() => wx.stopPullDownRefresh());
   },
 
+  _buildUserViewState(userInfo) {
+    const user = userInfo || {};
+    const needsNickName = !isAuthorizedNickName(user.nickName);
+    return {
+      userInfo: user,
+      displayNickName: getDisplayNickName(user),
+      needsNickName,
+      nickNameInput: needsNickName ? '' : user.nickName
+    };
+  },
+
+  _hashSeed(value) {
+    const text = String(value || '');
+    let hash = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      hash = ((hash << 5) - hash) + text.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  },
+
+  _buildPetPreview(pets) {
+    const list = Array.isArray(pets) ? pets : [];
+    const maxShow = 3;
+    const sliced = list.slice(0, maxShow);
+    const count = sliced.length;
+    const sizeMap = { 0: 'single', 1: 'single', 2: 'double', 3: 'triple' };
+
+    // 第一只固定在初始位置；第 2 只起在区域内水平随机选槽（位置按 id 稳定）
+    const firstFixed = { top: 116, right: 36 };
+    const extraSlots = [
+      { top: 48, left: 210 },
+      { top: 52, left: 280 },
+      { top: 44, left: 340 },
+      { top: 178, left: 200 },
+      { top: 186, left: 270 },
+      { top: 172, left: 330 },
+      { top: 100, left: 220 },
+      { top: 196, left: 380 }
+    ];
+
+    const usedSlotIndexes = new Set();
+    const previewPets = sliced.map((pet, index) => {
+      if (index === 0) {
+        return {
+          ...pet,
+          cardStyle: `top:${firstFixed.top}rpx;right:${firstFixed.right}rpx;z-index:4;`
+        };
+      }
+
+      const seed = this._hashSeed(pet.id || pet.name || index);
+      let slotIndex = seed % extraSlots.length;
+      let guard = 0;
+      while (usedSlotIndexes.has(slotIndex) && guard < extraSlots.length) {
+        slotIndex = (slotIndex + 1) % extraSlots.length;
+        guard += 1;
+      }
+      usedSlotIndexes.add(slotIndex);
+      const slot = extraSlots[slotIndex];
+      return {
+        ...pet,
+        cardStyle: `top:${slot.top}rpx;left:${slot.left}rpx;z-index:${3 + index};`
+      };
+    });
+
+    return {
+      petsCount: list.length,
+      previewPets,
+      petsMoreCount: Math.max(0, list.length - maxShow),
+      petPreviewSize: sizeMap[count] || 'triple'
+    };
+  },
+
+  _applyPageData(payload) {
+    this.setData({
+      ...this._buildUserViewState(payload.userInfo),
+      currentStore: payload.currentStore,
+      boardingPets: payload.boardingPets,
+      petsCount: payload.petsCount,
+      previewPets: payload.previewPets || [],
+      petsMoreCount: payload.petsMoreCount || 0,
+      petPreviewSize: payload.petPreviewSize || 'single'
+    });
+    this._syncNavTitle(payload.currentStore);
+  },
+
   _refreshPageFromCache() {
-    const userInfo = app.globalData.userInfo || { nickName: '微信用户', avatarUrl: '' };
+    const userInfo = app.globalData.userInfo || {};
     const pets = app.getPets();
     const storeId = app.getStoreId();
     const currentStore = app.getUserStoreView();
@@ -121,19 +235,19 @@ Page({
           createTimeText: formatOrderCreateTime(o) || '--'
         };
       });
-    this.setData({
+    this._applyPageData({
       userInfo,
       currentStore,
       boardingPets: orders,
-      petsCount: pets.length,
-      primaryPet: pets[0] || null
+      ...this._buildPetPreview(pets)
     });
-    this._syncNavTitle(currentStore);
   },
 
   _refreshPage() {
+    // 先用本地店铺视图出字，图片解析完成后再增量更新
+    this._refreshPageFromCache();
     app.getUserStoreViewDisplay().then((currentStore) => {
-        const userInfo = app.globalData.userInfo || { nickName: '微信用户', avatarUrl: '' };
+        const userInfo = app.globalData.userInfo || {};
         const pets = app.getPets();
         const storeId = app.getStoreId();
         storeDebug.logStoreState('首页 _refreshPage', app);
@@ -154,14 +268,32 @@ Page({
               createTimeText: formatOrderCreateTime(o) || '--'
             };
           });
-        this.setData({
+        this._applyPageData({
           userInfo,
           currentStore,
           boardingPets: orders,
-          petsCount: pets.length,
-          primaryPet: pets[0] || null
+          ...this._buildPetPreview(pets)
         });
-        this._syncNavTitle(currentStore);
+      });
+  },
+
+  onNickNameInput(e) {
+    this.setData({ nickNameInput: (e.detail.value || '').trim() });
+  },
+
+  onNickNameBlur(e) {
+    const nickName = ((e.detail && e.detail.value) || this.data.nickNameInput || '').trim();
+    if (!isAuthorizedNickName(nickName)) return;
+    if (nickName === (this.data.userInfo.nickName || '')) {
+      this.setData(this._buildUserViewState({ ...this.data.userInfo, nickName }));
+      return;
+    }
+    app.updateProfile({ nickName })
+      .then(() => {
+        this._refreshPageFromCache();
+      })
+      .catch((err) => {
+        console.error('[首页] 保存昵称失败', err);
       });
   },
 
@@ -196,8 +328,15 @@ Page({
   },
 
   onGoReserve() {
-    if (!app.getStoreId()) {
-      wx.showToast({ title: '请先通过店铺分享链接进入', icon: 'none' });
+    const storeId = app.getStoreId();
+    const currentStore = app.getCurrentStore();
+    if (!storeId || !currentStore) {
+      wx.showModal({
+        title: '暂无法预约',
+        content: '您还未绑定店铺，请先通过商家分享链接进入店铺后再预约服务。',
+        showCancel: false,
+        confirmText: '我知道了'
+      });
       return;
     }
     wx.navigateTo({ url: '/pages/user/reserve/reserve' });

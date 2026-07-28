@@ -1,26 +1,16 @@
 const db = require('../db');
 const wechat = require('../wechat');
+const identity = require('./identity');
+const userFields = require('./userFields');
 
 const COLLECTIONS = ['users', 'stores', 'pets', 'orders', 'daily_logs'];
 
-function normalizeIsMerchant(value) {
-  if (value === true || value === 1) return true;
-  if (typeof value === 'string') return value.toLowerCase() === 'true';
-  return false;
-}
-
-function normalizeMerchantStatus(value) {
-  const status = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (status === 'approved' || status === 'pending' || status === 'rejected') return status;
-  return '';
-}
-
-function isMerchantApprovedFromDoc(doc) {
-  const status = normalizeMerchantStatus(doc.merchantStatus);
-  if (status === 'approved') return true;
-  if (status === 'pending') return false;
-  return normalizeIsMerchant(doc.isMerchant);
-}
+const {
+  normalizeIsMerchant,
+  normalizeMerchantStatus,
+  isMerchantApprovedFromDoc,
+  formatUserStoreFields
+} = userFields;
 
 function formatUser(doc) {
   const merchantStatus = normalizeMerchantStatus(doc.merchantStatus);
@@ -28,6 +18,7 @@ function formatUser(doc) {
   const petIds = Array.isArray(doc.pet_ids)
     ? [...new Set(doc.pet_ids.filter((id) => typeof id === 'string' && id.trim()))]
     : [];
+  const storeFields = formatUserStoreFields(doc);
   return {
     _id: String(doc._id),
     openid: doc.openid,
@@ -37,13 +28,14 @@ function formatUser(doc) {
     realName: doc.realName || '',
     idCard: doc.idCard || '',
     address: doc.address || '',
-    store_id: doc.store_id || '',
+    ...storeFields,
     pet_ids: petIds,
     merchantStatus: merchantStatus || (isMerchant ? 'approved' : ''),
     merchantRole: (doc.merchantRole || '').toLowerCase() === 'staff' ? 'staff' : (
       isMerchant ? 'owner' : ''
     ),
     isMerchant,
+    hasMerchantCapability: isMerchant,
     role: isMerchant ? 'merchant' : 'user',
     createTime: doc.createTime,
     updateTime: doc.updateTime
@@ -51,14 +43,7 @@ function formatUser(doc) {
 }
 
 function pickCanonicalUser(records) {
-  if (!records.length) return null;
-  const merchantDoc = records.find((item) => normalizeIsMerchant(item.isMerchant));
-  if (merchantDoc) return merchantDoc;
-  return records.sort((a, b) => {
-    const timeDiff = (b.updateTime || b.createTime || 0) - (a.updateTime || a.createTime || 0);
-    if (timeDiff !== 0) return timeDiff;
-    return (a.createTime || 0) - (b.createTime || 0);
-  })[0];
+  return identity.pickPrimaryUser(records);
 }
 
 function mergePetIds(records) {
@@ -81,7 +66,7 @@ function mergeUserFields(records) {
   const staffRecord = records.find((item) => (item.merchantRole || '').toLowerCase() === 'staff');
   if (staffRecord) {
     merged.merchantRole = 'staff';
-    merged.store_id = staffRecord.store_id || merged.store_id || '';
+    merged.merchantStoreId = staffRecord.merchantStoreId || staffRecord.store_id || merged.merchantStoreId || '';
   }
   merged.merchantStatus = records.reduce((best, item) => {
     const status = normalizeMerchantStatus(item.merchantStatus);
@@ -91,13 +76,24 @@ function mergeUserFields(records) {
     return best;
   }, '');
 
-  const textFields = ['nickName', 'avatarUrl', 'phone', 'realName', 'idCard', 'address', 'store_id'];
+  const textFields = ['nickName', 'avatarUrl', 'phone', 'realName', 'idCard', 'address'];
   textFields.forEach((field) => {
     if (!merged[field]) {
       const found = records.find((item) => item[field]);
       if (found) merged[field] = found[field];
     }
   });
+
+  const merchantStoreId = records
+    .map((item) => userFields.resolveMerchantStoreId(item))
+    .find(Boolean) || userFields.resolveMerchantStoreId(merged) || '';
+  const visitStoreId = records
+    .map((item) => userFields.resolveVisitStoreId(item))
+    .find(Boolean) || userFields.resolveVisitStoreId(merged) || '';
+
+  merged.merchantStoreId = merchantStoreId;
+  merged.visitStoreId = visitStoreId;
+  merged.store_id = visitStoreId;
 
   merged.createTime = Math.min(...records.map((item) => item.createTime || Date.now()));
   merged.updateTime = Math.max(...records.map((item) => item.updateTime || item.createTime || 0));
@@ -106,6 +102,8 @@ function mergeUserFields(records) {
 }
 
 async function fetchUsersByOpenid(openid) {
+  const byAny = await identity.findUsersByOpenidAny(openid);
+  if (byAny.length) return byAny;
   return db.findMany('users', { openid });
 }
 
@@ -127,7 +125,9 @@ async function dedupeUsersByOpenid(openid) {
     realName: merged.realName || '',
     idCard: merged.idCard || '',
     address: merged.address || '',
-    store_id: merged.store_id || '',
+    merchantStoreId: merged.merchantStoreId || '',
+    visitStoreId: merged.visitStoreId || '',
+    store_id: merged.visitStoreId || '',
     pet_ids: mergePetIds(records),
     isMerchant: !!merged.isMerchant,
     merchantStatus: merged.merchantStatus || '',
@@ -157,6 +157,8 @@ async function getOrCreateUser(openid) {
     idCard: '',
     address: '',
     store_id: '',
+    merchantStoreId: '',
+    visitStoreId: '',
     pet_ids: [],
     isMerchant: false,
     merchantStatus: '',
@@ -208,6 +210,7 @@ async function syncProfile(event, openid) {
   const profile = event.profile || {};
   const doc = await getOrCreateUser(openid);
   const now = Date.now();
+  const storeFields = formatUserStoreFields(doc);
   const profileData = {
     nickName: profile.nickName || doc.nickName || '',
     avatarUrl: profile.avatarUrl || doc.avatarUrl || '',
@@ -215,7 +218,9 @@ async function syncProfile(event, openid) {
     realName: profile.realName || doc.realName || '',
     idCard: profile.idCard || doc.idCard || '',
     address: profile.address || doc.address || '',
-    store_id: doc.store_id || '',
+    merchantStoreId: storeFields.merchantStoreId,
+    visitStoreId: storeFields.visitStoreId,
+    store_id: storeFields.visitStoreId,
     updateTime: now
   };
 
@@ -259,15 +264,11 @@ async function bindUserStore(event, openid) {
 
   const doc = await getOrCreateUser(openid);
   const now = Date.now();
-  const isStaffUser = (doc.merchantRole || '').toLowerCase() === 'staff'
-    && (doc.store_id || '').trim() === storeId;
   const updateData = {
+    visitStoreId: storeId,
     store_id: storeId,
     updateTime: now
   };
-  if (!isStaffUser && !isMerchantApprovedFromDoc(doc)) {
-    updateData.isMerchant = false;
-  }
 
   const updated = await db.updateById('users', doc._id, updateData);
   return { success: true, user: formatUser(updated), store: storeDocs[0] };
@@ -281,13 +282,14 @@ async function setMerchantProfile(event, openid) {
   const storeId = (event.store_id || '').trim();
   const doc = await getOrCreateUser(openid);
   const now = Date.now();
+  const storeFields = formatUserStoreFields(doc);
   const updateData = {
+    merchantStoreId: storeId || storeFields.merchantStoreId,
+    visitStoreId: storeFields.visitStoreId,
+    store_id: storeFields.visitStoreId,
     updateTime: now
   };
-  if (storeId) {
-    updateData.store_id = storeId;
-  }
-  if (isMerchantApprovedFromDoc(doc)) {
+  if (storeId && isMerchantApprovedFromDoc(doc)) {
     updateData.isMerchant = true;
     updateData.merchantStatus = 'approved';
   }
@@ -296,7 +298,7 @@ async function setMerchantProfile(event, openid) {
   return { success: true, user: formatUser(updated) };
 }
 
-async function bindPhone(event, openid) {
+async function bindPhone(event, openid, req) {
   if (!openid) {
     return { success: false, errMsg: '无法获取用户身份' };
   }
@@ -306,9 +308,10 @@ async function bindPhone(event, openid) {
     return { success: false, errMsg: '缺少手机号授权 code' };
   }
 
+  const client = wechat.normalizeClient((req && req.client) || (event && event.client) || 'user');
   let phone = '';
   try {
-    phone = await wechat.getPhoneNumber(code);
+    phone = await wechat.getPhoneNumber(code, client);
   } catch (err) {
     console.error('getPhoneNumber failed', err);
     return {
@@ -322,12 +325,8 @@ async function bindPhone(event, openid) {
   }
 
   const doc = await getOrCreateUser(openid);
-  const now = Date.now();
-  const updated = await db.updateById('users', doc._id, {
-    phone,
-    updateTime: now
-  });
-  await dedupeUsersByOpenid(openid);
+  const updated = await identity.mergeByPhone(doc, phone);
+  await dedupeUsersByOpenid((updated && updated.openid) || openid);
 
   return { success: true, phone, user: formatUser(updated) };
 }
@@ -341,7 +340,7 @@ async function ping(openid) {
   };
 }
 
-async function handle(event, openid) {
+async function handle(event, openid, req) {
   switch (event.action) {
     case 'ping':
       return ping(openid);
@@ -352,7 +351,7 @@ async function handle(event, openid) {
     case 'syncProfile':
       return syncProfile(event, openid);
     case 'bindPhone':
-      return bindPhone(event, openid);
+      return bindPhone(event, openid, req);
     case 'dedupeMyUser':
       return dedupeMyUser(openid);
     case 'bindUserStore':

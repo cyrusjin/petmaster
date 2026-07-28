@@ -106,6 +106,8 @@
     </view>
   </view>
 
+  <view class="merchant-tab-spacer"></view>
+
   <view class="merchant-tab-bar">
     <view class="tab-item active" bindtap="onTabDaily">
       <image class="tab-icon-img" catchtap="onAdminSecretTap" src="/images/tab/tab-order-active.png" mode="aspectFit" />

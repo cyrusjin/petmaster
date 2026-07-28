@@ -33,7 +33,7 @@
     <view class="form-group"><text class="form-label"><text class="required-star">*</text>疫苗接种</text><radio-group class="flex-row gap-20" bindchange="onRadio" data-field="vaccination"><label class="flex-row gap-16"><radio value="已接种" checked="{{vaccination==='已接种'}}" color="#4CAF50"/>已接种</label><label class="flex-row gap-16"><radio value="未接种" checked="{{vaccination==='未接种'}}" color="#4CAF50"/>未接种</label></radio-group></view>
     <view class="form-group">
       <text class="form-label"><text class="required-star">*</text>驱虫时间</text>
-      <view class="form-input date-picker-trigger" bindtap="onOpenDewormDatePicker">
+      <view class="form-input date-picker-trigger {{dewormDate ? '' : 'is-placeholder'}}" bindtap="onOpenDewormDatePicker">
         {{dewormDate || '请选择日期'}}
       </view>
     </view>

@@ -1,80 +1,46 @@
-# PetMaster · 宠物寄养小程序
+# PetMaster · 宠物寄养小程序（宠主端）
 
-基于微信云开发模板搭建的宠物寄养服务小程序，当前业务数据使用本地 Storage 模拟，后续可逐步迁移至云数据库。
+宠主端小程序，业务数据通过自建 API（`https://api.petmaster.me`）读写；商家端为独立小程序 `PetMasterBusiness`。
+
+## AppID
+
+- 宠主端：`wx95d01c319ed4f686`
+- 商家端：`wx327ccf77cdedc252`
 
 ## 项目结构
 
 ```
 petmaster/
-├── cloudfunctions/          # 云函数（预留，待接入后端能力）
-│   └── quickstartFunctions/ # 云开发 QuickStart 示例函数
-├── miniprogram/             # 小程序前端
-│   ├── app.js               # 全局入口：云初始化 + 业务数据层
-│   ├── app.json             # 页面路由、TabBar、全局组件
-│   ├── app.wxss             # 全局样式
-│   ├── components/          # 公共组件
-│   │   ├── calendar/        # 日历选择器
-│   │   └── sign-pad/        # 手写签名板
-│   ├── images/              # 静态资源
-│   │   ├── tab/             # TabBar 图标
-│   │   ├── avatar.png
-│   │   └── default-avatar.png
-│   ├── pages/               # 页面
-│   │   ├── index/           # Tab：首页
-│   │   ├── orders/          # Tab：订单列表
-│   │   ├── daily/           # Tab：寄养动态
-│   │   ├── mine/            # Tab：我的
-│   │   ├── user/            # 宠主端子页面
-│   │   │   ├── login/           登录
-│   │   │   ├── pets/            宠物档案列表
-│   │   │   ├── pet-form/        新增/编辑宠物
-│   │   │   ├── reserve/         预约寄养
-│   │   │   ├── order-detail/    订单详情
-│   │   │   ├── billing/         账单
-│   │   │   ├── contract/        协议查看
-│   │   │   ├── contract-sign/   协议签署
-│   │   │   ├── pet-daily/       宠物日常动态
-│   │   │   └── chat/            与商家聊天
-│   │   └── merchant/        # 商家端子页面
-│   │       ├── dashboard/       工作台
-│   │       ├── orders/          订单管理
-│   │       ├── order-detail/    订单详情
-│   │       ├── pets/            在店宠物
-│   │       ├── billing/         账单管理
-│   │       ├── billing-config/  计费规则配置
-│   │       ├── contract/        协议管理
-│   │       ├── contract-edit/   协议模板编辑
-│   │       ├── daily-check/     日常打卡
-│   │       ├── chat/            与宠主聊天
-│   │       ├── statistics/      数据统计
-│   │       └── settings/        店铺设置
-│   ├── utils/
-│   │   ├── constants.js     # Storage Key 常量
-│   │   └── util.js          # 日期、计费、枚举等工具函数
-│   └── sitemap.json
-├── project.config.json
-└── uploadCloudFunction.sh
+├── miniprogram/             # 宠主端小程序前端
+│   ├── config/api.js        # API Base URL 与 client 标识
+│   ├── utils/api.js         # HTTP 请求、登录、业务接口路由
+│   ├── utils/upload.js      # 媒体上传到服务器
+│   ├── app.js               # 全局入口与业务数据层
+│   └── pages/               # 宠主端页面（首页/订单/动态/预约等）
+├── server/                  # 自建后端（Express + MongoDB）
+└── project.config.json
 ```
 
-## 功能模块
+## 从商家分享进入
 
-| 模块 | 说明 |
-|------|------|
-| 宠主端 | 登录、宠物档案、预约寄养、订单/账单/协议、日常动态、聊天 |
-| 商家端 | 工作台、订单管理、在店宠物、计费配置、协议模板、日常打卡、统计 |
-| 公共 | 日历组件、签名板、全局样式与本地数据层 |
+客人通过商家「分享给客人」进入时，会先打开商家端中转页，再自动跳转到本小程序 `pages/index/index?store_id=xxx`。
+
+员工邀请链接若误打开本端，会提示跳转商家端小程序接受邀请。
+
+## API
+
+- Base URL：`https://api.petmaster.me`（配置于 `miniprogram/config/api.js`）
+- 登录：`POST /api/auth/login`，body 带 `{ code, client: "user" }`
+- 业务接口：`/api/user|store|order|pet|daily`、`/api/upload/sign`
+- 媒体：`wx.uploadFile` 到服务器，公开访问 `https://api.petmaster.me/media/...`
 
 ## 本地开发
 
 1. 用微信开发者工具打开本项目根目录
-2. 在 `miniprogram/app.js` 的 `globalData.env` 中填入云环境 ID（接入云能力时使用）
-3. 编译运行即可预览全部页面
-
-## 数据说明
-
-当前版本通过 `app.js` 中的 `getData` / `setData` 方法读写微信本地 Storage，适合原型演示与 UI 联调。接入云开发后，可将各 `save*` / `get*` 方法逐步替换为云数据库调用。
+2. 确认 `miniprogram/config/api.js` 中 `API_BASE_URL` 指向可用后端
+3. 开发者工具勾选「不校验合法域名」便于本地调试；真机/正式版需在公众平台配置 `https://api.petmaster.me`
+4. 后端部署见 `server/docs/DEPLOY.md`
 
 ## 参考文档
 
 - [微信小程序文档](https://developers.weixin.qq.com/miniprogram/dev/framework/)
-- [云开发文档](https://developers.weixin.qq.com/miniprogram/dev/wxcloud/basis/getting-started.html)

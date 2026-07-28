@@ -1,7 +1,7 @@
-const { callCloudFunction } = require('./cloudCall');
+const { callApiService, rejectOnFailure } = require('./api');
 
 function callUserAuth(action, data = {}) {
-  return callCloudFunction('userAuth', { action, ...data });
+  return callApiService('userAuth', { action, ...data });
 }
 
 function initDatabase() {
@@ -13,11 +13,13 @@ function getUserInfo() {
 }
 
 function syncProfile(profile) {
-  return callUserAuth('syncProfile', { profile });
+  return callUserAuth('syncProfile', { profile })
+    .then((res) => rejectOnFailure(res, '保存资料失败'));
 }
 
 function bindPhone(code) {
-  return callUserAuth('bindPhone', { code });
+  return callUserAuth('bindPhone', { code })
+    .then((res) => rejectOnFailure(res, '绑定手机号失败'));
 }
 
 function dedupeMyUser() {

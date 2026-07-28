@@ -65,7 +65,9 @@ Page({
     return userFeed.buildDailyViewLogs(app, rawLogs, orders).then((logs) => {
       if (gen !== this._showGen) return;
       const withUnread = badgeUtil.enrichLogsWithUnread(logs, orders);
-      const sig = withUnread.map((log) => `${log.id}:${log.isNew ? 1 : 0}`).join('|');
+      const sig = withUnread.map((log) => (
+        `${log.id}:${log.isNew ? 1 : 0}:${log.videoUrl || ''}:${log.videoCoverUrl || ''}`
+      )).join('|');
       if (sig === this._lastSig) return;
       this._lastSig = sig;
       this.setData({ logs: withUnread });

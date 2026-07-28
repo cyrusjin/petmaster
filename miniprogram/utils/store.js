@@ -1,7 +1,7 @@
-const { callCloudFunction } = require('./cloudCall');
+const { callApiService } = require('./api');
 
 function callStoreService(action, data = {}) {
-  return callCloudFunction('storeService', { action, ...data });
+  return callApiService('storeService', { action, ...data });
 }
 
 function getStore(storeId) {

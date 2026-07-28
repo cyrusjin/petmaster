@@ -1,6 +1,8 @@
 const db = require('../db');
 const oss = require('../oss');
 const wechat = require('../wechat');
+const identity = require('./identity');
+const userFields = require('./userFields');
 
 function formatStore(doc) {
   const latitude = parseFloat(doc.latitude);
@@ -38,6 +40,8 @@ function formatStore(doc) {
     staffOpenids: Array.isArray(doc.staffOpenids) ? doc.staffOpenids : [],
     merchantApplyStatus: doc.merchantApplyStatus || '',
     rejectReason: doc.rejectReason || '',
+    adminDisableReason: doc.adminDisableReason || '',
+    adminDisabledAt: doc.adminDisabledAt || 0,
     coopContractSigned: !!doc.coopContractSigned,
     coopContractSignTime: doc.coopContractSignTime || '',
     createTime: doc.createTime,
@@ -163,25 +167,26 @@ async function getStore(event) {
 
 async function clearStaleMerchantLink(openid) {
   if (!openid) return false;
-  const userRows = await db.findMany('users', { openid }, { limit: 1 });
-  if (!userRows.length) return false;
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  if (!user) return false;
 
-  const user = userRows[0];
-  const linkedStoreId = (user.store_id || '').trim();
-  if (linkedStoreId) {
-    const linkedStores = await db.findMany('stores', { store_id: linkedStoreId }, { limit: 1 });
+  const merchantStoreId = userFields.resolveMerchantStoreId(user);
+  if (merchantStoreId) {
+    const linkedStores = await db.findMany('stores', { store_id: merchantStoreId }, { limit: 1 });
     if (linkedStores.length > 0) return false;
   }
 
-  const ownedStores = await db.findMany('stores', { ownerOpenid: openid }, { limit: 1 });
+  const openids = identity.collectOpenids(user);
+  const ownedStores = await db.findMany('stores', { ownerOpenid: { $in: openids } }, { limit: 1 });
   if (ownedStores.length > 0) return false;
 
-  const hasStaleLink = user.store_id || user.merchantStatus || user.isMerchant;
+  const hasStaleLink = merchantStoreId || user.merchantStatus || user.isMerchant;
   if (!hasStaleLink) return false;
 
   const now = Date.now();
   await db.updateById('users', user._id, {
-    store_id: '',
+    merchantStoreId: '',
+    store_id: userFields.resolveVisitStoreId(user),
     isMerchant: false,
     merchantStatus: '',
     merchantRole: '',
@@ -199,18 +204,19 @@ async function getOwnedStoreByOpenid(openid) {
 async function resolveMerchantStoreDoc(openid) {
   if (!openid) return null;
 
-  const userRows = await db.findMany('users', { openid }, { limit: 1 });
-  const linkedStoreId = userRows.length ? (userRows[0].store_id || '').trim() : '';
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  const openids = user ? identity.collectOpenids(user) : [openid];
+  const merchantStoreId = user ? userFields.resolveMerchantStoreId(user) : '';
 
-  const ownedStores = await db.findMany('stores', { ownerOpenid: openid }, { limit: 1 });
-  if (ownedStores.length) return ownedStores[0];
-
-  if (linkedStoreId) {
-    const linkedStores = await db.findMany('stores', { store_id: linkedStoreId }, { limit: 1 });
+  if (merchantStoreId) {
+    const linkedStores = await db.findMany('stores', { store_id: merchantStoreId }, { limit: 1 });
     if (linkedStores.length) return linkedStores[0];
   }
 
-  const staffStores = await db.findMany('stores', { staffOpenids: openid }, { limit: 1 });
+  const ownedStores = await db.findMany('stores', { ownerOpenid: { $in: openids } }, { limit: 1 });
+  if (ownedStores.length) return ownedStores[0];
+
+  const staffStores = await db.findMany('stores', { staffOpenids: { $in: openids } }, { limit: 1 });
   if (staffStores.length) return staffStores[0];
 
   return null;
@@ -336,20 +342,29 @@ async function syncUserStoreLink(openid, storeId, options = {}) {
   if (!openid || !storeId) return;
   const pending = options.pending === true;
   const rejected = options.rejected === true;
-  const data = await db.findMany('users', { openid }, { limit: 1 });
+  const disabled = options.disabled === true;
+  const user = await identity.findPrimaryUserByOpenid(openid);
   const now = Date.now();
   let linkData;
   if (rejected) {
     linkData = {
-      store_id: storeId,
+      merchantStoreId: storeId,
       isMerchant: false,
       merchantStatus: 'rejected',
       merchantRole: '',
       updateTime: now
     };
+  } else if (disabled) {
+    linkData = {
+      merchantStoreId: storeId,
+      isMerchant: false,
+      merchantStatus: 'disabled',
+      merchantRole: user && user.merchantRole ? user.merchantRole : '',
+      updateTime: now
+    };
   } else if (pending) {
     linkData = {
-      store_id: storeId,
+      merchantStoreId: storeId,
       isMerchant: false,
       merchantStatus: 'pending',
       merchantRole: '',
@@ -357,23 +372,28 @@ async function syncUserStoreLink(openid, storeId, options = {}) {
     };
   } else {
     linkData = {
-      store_id: storeId,
+      merchantStoreId: storeId,
       isMerchant: true,
       merchantStatus: 'approved',
       merchantRole: 'owner',
       updateTime: now
     };
   }
-  if (data.length) {
-    await db.updateById('users', data[0]._id, linkData);
+  if (user) {
+    const visitStoreId = userFields.resolveVisitStoreId(user);
+    linkData.visitStoreId = visitStoreId;
+    linkData.store_id = visitStoreId;
+    await db.updateById('users', user._id, linkData);
     return;
   }
   await db.insertOne('users', {
     openid,
-    store_id: storeId,
-    isMerchant: rejected || pending ? false : true,
-    merchantStatus: rejected ? 'rejected' : (pending ? 'pending' : 'approved'),
-    merchantRole: rejected || pending ? '' : 'owner',
+    merchantStoreId: storeId,
+    visitStoreId: '',
+    store_id: '',
+    isMerchant: rejected || pending || disabled ? false : true,
+    merchantStatus: rejected ? 'rejected' : (disabled ? 'disabled' : (pending ? 'pending' : 'approved')),
+    merchantRole: rejected || pending || disabled ? '' : 'owner',
     nickName: '',
     avatarUrl: '',
     phone: '',
@@ -544,36 +564,51 @@ function formatApplyTime(ts) {
 }
 
 async function listPendingMerchantApplications() {
-  const pendingUsers = await db.findMany('users', { merchantStatus: 'pending' }, { limit: 100 });
-  const storeIds = [...new Set((pendingUsers || []).map((item) => item.store_id).filter(Boolean))];
-  const storeMap = {};
-  for (let i = 0; i < storeIds.length; i += 20) {
-    const chunk = storeIds.slice(i, i + 20);
-    const storeDocs = await db.findMany('stores', { store_id: { $in: chunk } });
-    (storeDocs || []).forEach((doc) => {
-      storeMap[doc.store_id] = doc;
+  const pendingStores = await db.findMany(
+    'stores',
+    { merchantApplyStatus: 'pending' },
+    { limit: 100, sort: { updateTime: -1 } }
+  );
+
+  const applications = [];
+  for (let i = 0; i < (pendingStores || []).length; i += 1) {
+    const storeDoc = pendingStores[i];
+    let applicantName = '';
+    let applicantPhone = '';
+
+    const users = await db.findMany('users', {
+      $or: [
+        { merchantStoreId: storeDoc.store_id },
+        { openid: storeDoc.ownerOpenid }
+      ]
+    }, { limit: 1 });
+
+    if (users.length) {
+      applicantName = users[0].realName || users[0].nickName || '';
+      applicantPhone = users[0].phone || '';
+    }
+
+    const store = await resolveStoreMediaUrls(formatStore(storeDoc));
+    applications.push({
+      store_id: store.store_id,
+      name: store.name,
+      legalName: store.legalName,
+      contactPhone: store.contactPhone,
+      address: store.address,
+      locationName: store.locationName,
+      latitude: store.latitude,
+      longitude: store.longitude,
+      storePhotos: store.storePhotos,
+      coopContractSigned: store.coopContractSigned,
+      coopContractSignTime: store.coopContractSignTime,
+      applicantName,
+      applicantPhone,
+      applyTime: storeDoc.updateTime || storeDoc.createTime || 0,
+      applyTimeText: formatApplyTime(storeDoc.updateTime || storeDoc.createTime)
     });
   }
 
-  const applications = (pendingUsers || [])
-    .map((user) => {
-      const storeDoc = storeMap[user.store_id];
-      if (!storeDoc) return null;
-      return {
-        store_id: storeDoc.store_id,
-        name: storeDoc.name || '',
-        legalName: storeDoc.legalName || '',
-        contactPhone: storeDoc.contactPhone || '',
-        address: storeDoc.address || '',
-        applicantName: user.realName || user.nickName || '',
-        applicantPhone: user.phone || '',
-        applyTime: storeDoc.updateTime || storeDoc.createTime || 0,
-        applyTimeText: formatApplyTime(storeDoc.updateTime || storeDoc.createTime)
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => (b.applyTime || 0) - (a.applyTime || 0));
-
+  applications.sort((a, b) => (b.applyTime || 0) - (a.applyTime || 0));
   return { success: true, applications };
 }
 
@@ -610,6 +645,188 @@ async function reviewMerchantApplication(event) {
     updateTime: now
   });
   await syncUserStoreLink(ownerOpenid, storeId, { rejected: true });
+  return { success: true };
+}
+
+async function collectStoreOpenids(storeDoc) {
+  const openids = new Set();
+  if (storeDoc.ownerOpenid) openids.add(storeDoc.ownerOpenid);
+  (Array.isArray(storeDoc.staffOpenids) ? storeDoc.staffOpenids : []).forEach((id) => {
+    if (id) openids.add(id);
+  });
+  return openids;
+}
+
+async function disableStoreMembers(storeDoc) {
+  const storeId = storeDoc.store_id;
+  const openids = await collectStoreOpenids(storeDoc);
+  for (const openid of openids) {
+    if (storeDoc.ownerOpenid === openid) {
+      await syncUserStoreLink(openid, storeId, { disabled: true });
+      continue;
+    }
+    const user = await identity.findPrimaryUserByOpenid(openid);
+    if (!user) continue;
+    await db.updateById('users', user._id, {
+      merchantStoreId: storeId,
+      isMerchant: false,
+      merchantStatus: 'disabled',
+      updateTime: Date.now()
+    });
+  }
+}
+
+async function enableStoreMembers(storeDoc) {
+  const storeId = storeDoc.store_id;
+  const openids = await collectStoreOpenids(storeDoc);
+  for (const openid of openids) {
+    if (storeDoc.ownerOpenid === openid) {
+      await syncUserStoreLink(openid, storeId, { pending: false });
+      continue;
+    }
+    const user = await identity.findPrimaryUserByOpenid(openid);
+    if (!user) continue;
+    await db.updateById('users', user._id, {
+      merchantStoreId: storeId,
+      store_id: storeId,
+      isMerchant: true,
+      merchantStatus: 'approved',
+      merchantRole: 'staff',
+      updateTime: Date.now()
+    });
+  }
+}
+
+async function findStoreApplicant(storeDoc) {
+  let applicantName = '';
+  let applicantPhone = '';
+  const users = await db.findMany('users', {
+    $or: [
+      { merchantStoreId: storeDoc.store_id },
+      { openid: storeDoc.ownerOpenid }
+    ]
+  }, { limit: 1 });
+
+  if (users.length) {
+    applicantName = users[0].realName || users[0].nickName || '';
+    applicantPhone = users[0].phone || '';
+  }
+
+  return { applicantName, applicantPhone };
+}
+
+function buildAdminStoreFilter(query = {}) {
+  const filter = {
+    merchantApplyStatus: { $exists: true, $ne: '' }
+  };
+  const status = (query.status || '').trim();
+  if (status) {
+    filter.merchantApplyStatus = status;
+  }
+
+  const keyword = (query.keyword || '').trim();
+  if (keyword) {
+    const regex = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [
+      { name: regex },
+      { legalName: regex },
+      { contactPhone: regex },
+      { store_id: regex },
+      { displayNo: regex },
+      { address: regex }
+    ];
+  }
+
+  return filter;
+}
+
+async function listAdminStores(query = {}) {
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 200);
+  const skip = Math.max(parseInt(query.skip, 10) || 0, 0);
+  const filter = buildAdminStoreFilter(query);
+
+  const [stores, total] = await Promise.all([
+    db.findMany('stores', filter, { limit, skip, sort: { updateTime: -1 } }),
+    db.collection('stores').countDocuments(filter)
+  ]);
+
+  const items = [];
+  for (let i = 0; i < (stores || []).length; i += 1) {
+    const storeDoc = stores[i];
+    const { applicantName, applicantPhone } = await findStoreApplicant(storeDoc);
+    const store = formatStore(storeDoc);
+    items.push({
+      store_id: store.store_id,
+      displayNo: store.displayNo,
+      name: store.name,
+      legalName: store.legalName,
+      contactPhone: store.contactPhone,
+      address: store.address,
+      merchantApplyStatus: store.merchantApplyStatus,
+      businessStatus: store.status,
+      rejectReason: store.rejectReason,
+      adminDisableReason: store.adminDisableReason,
+      applicantName,
+      applicantPhone,
+      applyTime: storeDoc.createTime || 0,
+      applyTimeText: formatApplyTime(storeDoc.createTime),
+      updateTime: storeDoc.updateTime || storeDoc.createTime || 0,
+      updateTimeText: formatApplyTime(storeDoc.updateTime || storeDoc.createTime),
+      adminDisabledAt: store.adminDisabledAt,
+      adminDisabledAtText: formatApplyTime(store.adminDisabledAt)
+    });
+  }
+
+  return {
+    success: true,
+    stores: items,
+    total,
+    limit,
+    skip
+  };
+}
+
+async function updateAdminStoreAccess(event) {
+  const storeId = (event.store_id || '').trim();
+  const action = (event.action || '').trim();
+  if (!storeId) return { success: false, errMsg: '缺少店铺 ID' };
+  if (action !== 'disable' && action !== 'enable') {
+    return { success: false, errMsg: '无效操作' };
+  }
+
+  const data = await db.findMany('stores', { store_id: storeId }, { limit: 1 });
+  if (!data.length) return { success: false, errMsg: '店铺不存在' };
+
+  const storeDoc = data[0];
+  const now = Date.now();
+
+  if (action === 'disable') {
+    if (storeDoc.merchantApplyStatus !== 'approved') {
+      return { success: false, errMsg: '仅已开通的店铺可以关闭' };
+    }
+    const reason = (event.reason || '').trim() || '店铺已被平台关闭，如有疑问请联系客服';
+    await db.updateById('stores', storeDoc._id, {
+      merchantApplyStatus: 'disabled',
+      adminDisableReason: reason,
+      adminDisabledAt: now,
+      status: '已闭店',
+      updateTime: now
+    });
+    await disableStoreMembers(storeDoc);
+    return { success: true };
+  }
+
+  if (storeDoc.merchantApplyStatus !== 'disabled') {
+    return { success: false, errMsg: '仅已关闭的店铺可以重新开通' };
+  }
+
+  await db.updateById('stores', storeDoc._id, {
+    merchantApplyStatus: 'approved',
+    adminDisableReason: '',
+    adminDisabledAt: 0,
+    updateTime: now
+  });
+  await enableStoreMembers(storeDoc);
   return { success: true };
 }
 
@@ -776,11 +993,13 @@ async function getStoreQrCode(event, openid) {
     : 'trial';
 
   try {
+    // 店铺码面向宠主，必须用宠主端小程序凭证生成
     const buffer = await wechat.getUnlimitedQrCode({
       scene,
       page: 'pages/index/index',
       envVersion: version,
-      width: 430
+      width: 430,
+      client: 'user'
     });
     const objectKey = `store-qrcodes/${storeId}.png`;
     const publicUrl = await oss.uploadBuffer(objectKey, buffer, 'image/png');
@@ -809,9 +1028,8 @@ async function handle(event, openid) {
     case 'submitMerchantApply':
       return submitMerchantApply(event, openid);
     case 'listPendingMerchantApplications':
-      return listPendingMerchantApplications();
     case 'reviewMerchantApplication':
-      return reviewMerchantApplication(event);
+      return { success: false, errMsg: '请登录官网管理后台进行审核' };
     case 'listStoreStaff':
       return listStoreStaff(openid);
     case 'removeStoreStaff':
@@ -825,4 +1043,12 @@ async function handle(event, openid) {
   }
 }
 
-module.exports = { handle, formatStore, resolveMerchantStoreDoc };
+module.exports = {
+  handle,
+  formatStore,
+  resolveMerchantStoreDoc,
+  listPendingMerchantApplications,
+  reviewMerchantApplication,
+  listAdminStores,
+  updateAdminStoreAccess
+};

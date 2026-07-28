@@ -1,6 +1,5 @@
 {
   "miniprogramRoot": "miniprogram/",
-  "cloudfunctionRoot": "cloudfunctions/",
   "setting": {
     "urlCheck": true,
     "es6": true,
@@ -45,21 +44,14 @@
     "disableSWC": true
   },
   "description": "宠物寄养服务小程序",
-  "appid": "wxeeeb958364d3c6d9",
+  "appid": "wx95d01c319ed4f686",
   "projectname": "petmaster",
   "libVersion": "3.3.4",
   "condition": {
     "miniprogram": {
       "list": [
         {
-          "name": "商家端",
-          "pathName": "pages/merchant/tab-daily/tab-daily",
-          "query": "",
-          "launchMode": "default",
-          "scene": null
-        },
-        {
-          "name": "宠主端",
+          "name": "宠主端首页",
           "pathName": "pages/index/index",
           "query": "",
           "launchMode": "default",

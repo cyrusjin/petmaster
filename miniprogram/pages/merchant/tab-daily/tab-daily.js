@@ -71,13 +71,8 @@ Page({
         app.globalData.pendingStaffInviteStoreId = '';
       }
 
-      if (app.isUserClientMode && app.isUserClientMode()) {
+      if ((app.isUserClientMode && app.isUserClientMode()) || !app.canAccessMerchantBackend()) {
         wx.switchTab({ url: '/pages/index/index' });
-        return;
-      }
-
-      if (!app.canAccessMerchantBackend()) {
-        wx.reLaunch({ url: '/pages/merchant/tab-daily/tab-daily' });
         return;
       }
 

@@ -24,6 +24,26 @@ function deriveDisplayNo(seed, length = 10) {
   return out;
 }
 
+function formatOrderDisplayTime(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    String(date.getFullYear()) +
+    pad(date.getMonth() + 1) +
+    pad(date.getDate()) +
+    pad(date.getHours()) +
+    pad(date.getMinutes()) +
+    pad(date.getSeconds())
+  );
+}
+
+/** 订单号：店铺编号 + yyyyMMddHHmmss + 4位随机 */
+function buildOrderDisplayNo(storeDisplayNo, now = Date.now()) {
+  const storePart = String(storeDisplayNo || '').trim() || '00000000';
+  const timePart = formatOrderDisplayTime(new Date(now));
+  const randomPart = buildRandomDisplayNo(4);
+  return `${storePart}${timePart}${randomPart}`;
+}
+
 function resolveOrderDisplayNo(order) {
   if (!order) return '';
   if (order.displayNo) return String(order.displayNo).trim();
@@ -35,7 +55,7 @@ function resolveStoreDisplayNo(store) {
   if (!store) return '';
   if (store.displayNo) return String(store.displayNo).trim();
   const seed = store.store_id || '';
-  return seed ? deriveDisplayNo(`store:${seed}`) : '';
+  return seed ? deriveDisplayNo(`store:${seed}`, 8) : '';
 }
 
 function attachOrderDisplayNo(order) {
@@ -55,6 +75,7 @@ function attachStoreDisplayNo(store) {
 module.exports = {
   CODE_CHARS,
   buildRandomDisplayNo,
+  buildOrderDisplayNo,
   deriveDisplayNo,
   resolveOrderDisplayNo,
   resolveStoreDisplayNo,

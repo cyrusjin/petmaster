@@ -1,4 +1,5 @@
 const app = getApp();
+const { copyText } = require('../../utils/clipboard');
 const { guardUserTabPage } = require('../../utils/shell');
 const badgeUtil = require('../../utils/badge');
 const { refreshUserOrders } = require('../../utils/orderRefresh');
@@ -92,6 +93,10 @@ Page({
   },
 
   onDetail(e) { wx.navigateTo({ url: '/pages/user/order-detail/order-detail?id=' + e.currentTarget.dataset.id }); },
+
+  onCopyOrderNo(e) {
+    copyText(e.currentTarget.dataset.no, '已复制订单号');
+  },
 
   onConfirmPrice(e) {
     const id = e.currentTarget.dataset.id;

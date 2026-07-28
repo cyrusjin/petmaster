@@ -2,7 +2,6 @@
 
 .stats-page {
   min-height: 100vh;
-  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
 }
 
 .demo-banner {

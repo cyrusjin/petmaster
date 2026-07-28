@@ -38,38 +38,38 @@ function hasBusinessHours(shop) {
 }
 
 /**
- * 云端与本地店铺数据合并：云端优先，但避免用空云端覆盖有效本地缓存。
+ * 服务端与本地店铺数据合并：服务端优先，但避免用空数据覆盖有效本地缓存。
  */
-function mergeMerchantShop(local, cloud) {
-  if (!cloud || !cloud.store_id) return local || cloud || {};
-  if (!local || !local.store_id || local.store_id !== cloud.store_id) {
-    return { ...cloud };
+function mergeMerchantShop(local, remote) {
+  if (!remote || !remote.store_id) return local || remote || {};
+  if (!local || !local.store_id || local.store_id !== remote.store_id) {
+    return { ...remote };
   }
 
   const merged = {
     ...local,
-    ...cloud,
-    store_id: cloud.store_id
+    ...remote,
+    store_id: remote.store_id
   };
 
   MERGE_TEXT_FIELDS.forEach((key) => {
-    const cloudVal = (cloud[key] || '').trim();
+    const remoteVal = (remote[key] || '').trim();
     const localVal = (local[key] || '').trim();
-    if (!cloudVal && localVal) merged[key] = local[key];
+    if (!remoteVal && localVal) merged[key] = local[key];
   });
 
-  if (!hasReceptionRange(cloud) && hasReceptionRange(local)) {
+  if (!hasReceptionRange(remote) && hasReceptionRange(local)) {
     merged.receptionRange = local.receptionRange || local.range;
     merged.range = local.range || formatReceptionRangeText(local.receptionRange);
   } else {
-    merged.receptionRange = normalizeReceptionRange(cloud.receptionRange || cloud.range);
+    merged.receptionRange = normalizeReceptionRange(remote.receptionRange || remote.range);
     merged.range = formatReceptionRangeText(merged.receptionRange);
   }
 
-  if (!hasStorePhotos(cloud) && hasStorePhotos(local)) {
+  if (!hasStorePhotos(remote) && hasStorePhotos(local)) {
     merged.storePhotos = local.storePhotos;
-  } else if (Array.isArray(cloud.storePhotos) && Array.isArray(local.storePhotos)) {
-    merged.storePhotos = cloud.storePhotos.map((url, index) => {
+  } else if (Array.isArray(remote.storePhotos) && Array.isArray(local.storePhotos)) {
+    merged.storePhotos = remote.storePhotos.map((url, index) => {
       if (isCloudFileId(local.storePhotos[index]) && !isCloudFileId(url)) {
         return local.storePhotos[index];
       }
@@ -77,28 +77,28 @@ function mergeMerchantShop(local, cloud) {
     });
   }
 
-  if (isCloudFileId(local.logo) && cloud.logo && !isCloudFileId(cloud.logo)) {
+  if (isCloudFileId(local.logo) && remote.logo && !isCloudFileId(remote.logo)) {
     merged.logo = local.logo;
   }
 
-  if (!hasBillingRules(cloud) && hasBillingRules(local)) {
+  if (!hasBillingRules(remote) && hasBillingRules(local)) {
     merged.billingRules = local.billingRules;
   }
 
-  if (!hasBusinessHours(cloud) && hasBusinessHours(local)) {
+  if (!hasBusinessHours(remote) && hasBusinessHours(local)) {
     merged.businessHours = local.businessHours;
     if ((local.hours || '').trim()) merged.hours = local.hours;
   }
 
-  if (cloud.pickupService == null && local.pickupService != null) {
+  if (remote.pickupService == null && local.pickupService != null) {
     merged.pickupService = local.pickupService;
   }
 
-  if (cloud.deposit == null && local.deposit != null) {
+  if (remote.deposit == null && local.deposit != null) {
     merged.deposit = local.deposit;
   }
 
-  if (cloud.compensationLimit == null && local.compensationLimit != null) {
+  if (remote.compensationLimit == null && local.compensationLimit != null) {
     merged.compensationLimit = local.compensationLimit;
   }
 

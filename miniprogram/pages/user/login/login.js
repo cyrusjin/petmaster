@@ -1,6 +1,6 @@
 const app = getApp();
 const auth = require('../../../utils/auth');
-const { uploadLocalImage } = require('../../../utils/cloudUpload');
+const { uploadLocalImage } = require('../../../utils/upload');
 const { resolveStoreDisplayNo } = require('../../../utils/displayNo');
 const { copyText } = require('../../../utils/clipboard');
 
@@ -32,7 +32,7 @@ Page({
       const u = app.globalData.userInfo || {};
       const meta = app.globalData.authMeta || {};
       const hasOpenid = !!(u.openid || meta.requestOpenid);
-      const lastError = app.globalData.lastCloudError || '';
+      const lastError = app.globalData.lastApiError || '';
       const store = app.getUserStoreView();
       const storeId = u.store_id || app.getStoreId() || '';
       const storeDisplayNo = resolveStoreDisplayNo(store || { store_id: storeId });
@@ -78,10 +78,10 @@ Page({
       .then(() => {
         wx.hideLoading();
         this._loadAuthInfo();
-        if (app.globalData.lastCloudError) {
+        if (app.globalData.lastApiError) {
           wx.showModal({
             title: 'API 异常',
-            content: app.globalData.lastCloudError,
+            content: app.globalData.lastApiError,
             showCancel: false
           });
           return;
@@ -167,10 +167,10 @@ Page({
       }))
       .then(() => {
         wx.hideLoading();
-        if (app.globalData.lastCloudError) {
+        if (app.globalData.lastApiError) {
           wx.showModal({
             title: '保存失败',
-            content: app.globalData.lastCloudError,
+            content: app.globalData.lastApiError,
             showCancel: false
           });
           return;

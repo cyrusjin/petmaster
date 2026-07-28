@@ -1,40 +1,70 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const config = require('./config');
 
-function getOssClient() {
-  if (!config.oss.accessKeyId || !config.oss.bucket) {
-    throw new Error('OSS 未配置');
+const execFileAsync = promisify(execFile);
+const VIDEO_EXT_PATTERN = /\.(mp4|mov|m4v|avi|mkv|webm)(\?|$)/i;
+
+function ensureMediaRoot() {
+  const root = config.media.root;
+  fs.mkdirSync(root, { recursive: true });
+  return root;
+}
+
+function sanitizeObjectKey(objectKey) {
+  const key = String(objectKey || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\.\./g, '');
+  if (!key || key.includes('..')) {
+    throw new Error('非法文件路径');
   }
-  // 延迟加载，避免部分环境下模块初始化读网卡失败
-  const OSS = require('ali-oss');
-  return new OSS({
-    region: config.oss.region,
-    accessKeyId: config.oss.accessKeyId,
-    accessKeySecret: config.oss.accessKeySecret,
-    bucket: config.oss.bucket
-  });
+  return key;
+}
+
+function absolutePathForKey(objectKey) {
+  const key = sanitizeObjectKey(objectKey);
+  const full = path.join(config.media.root, key);
+  const root = path.resolve(config.media.root);
+  const resolved = path.resolve(full);
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    throw new Error('非法文件路径');
+  }
+  return resolved;
 }
 
 function buildPublicUrl(objectKey) {
-  if (config.oss.publicBaseUrl) {
-    return `${config.oss.publicBaseUrl.replace(/\/$/, '')}/${objectKey}`;
-  }
-  return `https://${config.oss.bucket}.${config.oss.region}.aliyuncs.com/${objectKey}`;
+  const key = sanitizeObjectKey(objectKey);
+  return `${config.media.publicBaseUrl.replace(/\/$/, '')}/${key}`;
+}
+
+function isLocalTempMediaUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const text = url.trim();
+  return text.startsWith('wxfile://')
+    || text.startsWith('http://tmp/')
+    || text.startsWith('https://tmp/')
+    || text.startsWith('http://usr/')
+    || text.startsWith('https://usr/');
 }
 
 function isOssUrl(url) {
   if (!url || typeof url !== 'string') return false;
   if (url.startsWith('cloud://')) return false;
+  if (isLocalTempMediaUrl(url)) return false;
   if (url.startsWith('https://') || url.startsWith('http://')) return true;
   return false;
 }
 
 function isStoredMedia(url) {
-  return typeof url === 'string' && (
-    url.startsWith('cloud://')
+  if (!url || typeof url !== 'string') return false;
+  if (isLocalTempMediaUrl(url)) return false;
+  return url.startsWith('cloud://')
     || url.startsWith('https://')
-    || url.startsWith('http://')
-  );
+    || url.startsWith('http://');
 }
 
 function extractObjectKey(url) {
@@ -42,7 +72,14 @@ function extractObjectKey(url) {
   if (!url.startsWith('http://') && !url.startsWith('https://')) return url;
   try {
     const parsed = new URL(url);
-    return decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+    const basePath = new URL(config.media.publicBaseUrl).pathname.replace(/\/$/, '');
+    let pathname = decodeURIComponent(parsed.pathname);
+    if (basePath && pathname.startsWith(basePath + '/')) {
+      pathname = pathname.slice(basePath.length + 1);
+    } else {
+      pathname = pathname.replace(/^\//, '');
+    }
+    return pathname;
   } catch (err) {
     return '';
   }
@@ -51,18 +88,104 @@ function extractObjectKey(url) {
 async function resolveMediaUrl(url) {
   if (!url) return '';
   if (url.startsWith('cloud://')) return '';
-  if (!isOssUrl(url)) return url;
-  if (config.oss.publicRead) return url;
+  return url;
+}
 
-  const key = extractObjectKey(url);
-  if (!key) return url;
-  try {
-    const client = getOssClient();
-    return client.signatureUrl(key, { expires: config.oss.signedUrlExpires });
-  } catch (err) {
-    console.error('resolveMediaUrl failed', err);
-    return url;
+function coverKeyForVideoKey(videoKey) {
+  const parsed = path.posix.parse(String(videoKey || '').replace(/\\/g, '/'));
+  const dir = parsed.dir ? `${parsed.dir}/` : '';
+  return `${dir}${parsed.name}_cover.jpg`;
+}
+
+function isVideoMedia(url) {
+  return VIDEO_EXT_PATTERN.test(String(url || ''));
+}
+
+async function ensureVideoCoverUrl(videoUrl) {
+  if (!videoUrl || !isVideoMedia(videoUrl)) return '';
+
+  const videoKey = extractObjectKey(videoUrl);
+  if (!videoKey) return '';
+
+  const coverKey = coverKeyForVideoKey(videoKey);
+  const coverPath = absolutePathForKey(coverKey);
+  if (fs.existsSync(coverPath)) {
+    return buildPublicUrl(coverKey);
   }
+
+  const videoPath = absolutePathForKey(videoKey);
+  if (!fs.existsSync(videoPath)) return '';
+
+  try {
+    fs.mkdirSync(path.dirname(coverPath), { recursive: true });
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-ss', '0.1',
+      '-i', videoPath,
+      '-frames:v', '1',
+      '-q:v', '2',
+      coverPath
+    ], { timeout: 30000 });
+    if (fs.existsSync(coverPath)) {
+      return buildPublicUrl(coverKey);
+    }
+  } catch (err) {
+    console.warn('[oss] generate video cover failed', videoKey, err.message || err);
+  }
+  return '';
+}
+
+async function resolveVideoCoverUrl(videoUrl, storedCoverUrl) {
+  // 拒绝微信临时路径等非法封面，避免挡住 ffmpeg 抽帧兜底
+  const cover = storedCoverUrl && isStoredMedia(storedCoverUrl)
+    ? await resolveMediaUrl(storedCoverUrl)
+    : '';
+  if (cover) return cover;
+  return ensureVideoCoverUrl(videoUrl);
+}
+
+/** 兼容旧名：返回小程序直传本地 API 所需字段 */
+function createPostPolicy(folder = 'uploads', ext = 'jpg') {
+  ensureMediaRoot();
+  const safeFolder = String(folder || 'uploads').replace(/^\/+|\/+$/g, '').replace(/\.\./g, '');
+  const safeExt = String(ext || 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+  const objectKey = `${safeFolder}/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${safeExt}`;
+  const host = `${config.media.apiPublicBaseUrl.replace(/\/$/, '')}/api/upload`;
+  const publicUrl = buildPublicUrl(objectKey);
+  const expireAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+  return {
+    host,
+    key: objectKey,
+    publicUrl,
+    expireAt,
+    // 兼容旧客户端字段（本地上传不再使用）
+    policy: '',
+    OSSAccessKeyId: '',
+    signature: '',
+    success_action_status: '200'
+  };
+}
+
+async function uploadBuffer(objectKey, buffer, contentType = 'application/octet-stream') {
+  ensureMediaRoot();
+  const fullPath = absolutePathForKey(objectKey);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, buffer);
+  return buildPublicUrl(objectKey);
+}
+
+function saveUploadedFile(objectKey, tempPath) {
+  ensureMediaRoot();
+  const fullPath = absolutePathForKey(objectKey);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.copyFileSync(tempPath, fullPath);
+  try {
+    fs.unlinkSync(tempPath);
+  } catch (err) {
+    // ignore cleanup errors
+  }
+  return buildPublicUrl(objectKey);
 }
 
 async function resolveMediaUrls(urls) {
@@ -74,56 +197,19 @@ async function resolveMediaUrls(urls) {
   return resolved.filter(Boolean);
 }
 
-function createPostPolicy(folder = 'uploads', ext = 'jpg') {
-  const safeFolder = String(folder || 'uploads').replace(/^\/+|\/+$/g, '');
-  const safeExt = String(ext || 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
-  const objectKey = `${safeFolder}/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${safeExt}`;
-  const expireAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  const policyObj = {
-    expiration: expireAt,
-    conditions: [
-      ['content-length-range', 0, 50 * 1024 * 1024],
-      ['eq', '$key', objectKey],
-      ['eq', '$bucket', config.oss.bucket]
-    ]
-  };
-  const policy = Buffer.from(JSON.stringify(policyObj)).toString('base64');
-  const signature = crypto
-    .createHmac('sha1', config.oss.accessKeySecret)
-    .update(policy)
-    .digest('base64');
-
-  const host = `https://${config.oss.bucket}.${config.oss.region}.aliyuncs.com`;
-  const publicUrl = buildPublicUrl(objectKey);
-
-  return {
-    host,
-    key: objectKey,
-    policy,
-    OSSAccessKeyId: config.oss.accessKeyId,
-    signature,
-    success_action_status: '200',
-    publicUrl,
-    expireAt
-  };
-}
-
-async function uploadBuffer(objectKey, buffer, contentType = 'application/octet-stream') {
-  const client = getOssClient();
-  await client.put(objectKey, buffer, {
-    headers: { 'Content-Type': contentType }
-  });
-  return buildPublicUrl(objectKey);
-}
-
 module.exports = {
-  getOssClient,
+  ensureMediaRoot,
   buildPublicUrl,
   isOssUrl,
   isStoredMedia,
+  isVideoMedia,
   extractObjectKey,
   resolveMediaUrl,
   resolveMediaUrls,
+  resolveVideoCoverUrl,
+  ensureVideoCoverUrl,
   createPostPolicy,
-  uploadBuffer
+  uploadBuffer,
+  saveUploadedFile,
+  absolutePathForKey
 };

@@ -1,6 +1,6 @@
 const { dedupeDailyLogs, getLogId } = require('./dailyLogUtil');
 const { formatTimeLabel } = require('./dailyTimeline');
-const { resolveVideoUrl } = require('./mediaUrl');
+const { resolveVideoUrl, resolveVideoCoverUrl } = require('./mediaUrl');
 
 function getUserScopedOrders(app) {
   const storeId = app.getStoreId();
@@ -37,7 +37,7 @@ function mergeDailyLogsForOrders(existing, fetched, orderIds) {
   });
   const merged = dedupeDailyLogs(others.concat(fetched || []));
   const sig = (list) => list
-    .map((log) => `${getLogId(log)}:${log.updateTime || log.createTime || 0}:${log.videoUrl || ''}`)
+    .map((log) => `${getLogId(log)}:${log.updateTime || log.createTime || 0}:${log.videoUrl || ''}:${log.videoCoverUrl || ''}`)
     .sort()
     .join('|');
   return {
@@ -50,7 +50,13 @@ function persistResolvedVideoUrls(app, logs) {
   const updates = new Map();
   (logs || []).forEach((log) => {
     const id = getLogId(log);
-    if (id && log.videoUrl) updates.set(id, log.videoUrl);
+    if (!id) return;
+    if (log.videoUrl || log.videoCoverUrl) {
+      updates.set(id, {
+        videoUrl: log.videoUrl || '',
+        videoCoverUrl: log.videoCoverUrl || ''
+      });
+    }
   });
   if (!updates.size) return false;
 
@@ -58,12 +64,18 @@ function persistResolvedVideoUrls(app, logs) {
   let dirty = false;
   const next = all.map((log) => {
     const id = getLogId(log);
-    const url = id ? updates.get(id) : '';
-    if (url && log.videoUrl !== url) {
-      dirty = true;
-      return { ...log, videoUrl: url };
+    const resolved = id ? updates.get(id) : null;
+    if (!resolved) return log;
+    const patch = {};
+    if (resolved.videoUrl && log.videoUrl !== resolved.videoUrl) {
+      patch.videoUrl = resolved.videoUrl;
     }
-    return log;
+    if (resolved.videoCoverUrl && log.videoCoverUrl !== resolved.videoCoverUrl) {
+      patch.videoCoverUrl = resolved.videoCoverUrl;
+    }
+    if (!Object.keys(patch).length) return log;
+    dirty = true;
+    return { ...log, ...patch };
   });
   if (dirty) {
     app.patchDailyLogs(next);
@@ -80,28 +92,35 @@ function buildDailyViewLogs(app, rawLogs, orders) {
       || item.order_id === log.orderId || item.order_id === log.order_id
     ));
     const pet = order ? pets.find((item) => item.id === order.petId) : null;
+    const videoUrl = log.videoUrl || log.video || '';
+    const videoCoverUrl = log.videoCoverUrl || log.videoCover || '';
     return {
       ...log,
       petName: log.petName || (order ? order.petName : '未知'),
       petPhoto: pet ? pet.photo : (log.petPhoto || ''),
       time: log.time || formatTimeLabel(log),
-      videoUrl: log.videoUrl || ''
+      videoUrl,
+      videoCoverUrl
     };
   });
 
-  const needResolve = enriched.filter((log) => !log.videoUrl && log.video);
-  if (!needResolve.length) {
-    return Promise.resolve(enriched);
-  }
-
-  return Promise.all(needResolve.map((log) => (
-    resolveVideoUrl(log.video).then((videoUrl) => {
-      if (videoUrl) log.videoUrl = videoUrl;
-      return log;
-    })
-  ))).then(() => {
-    persistResolvedVideoUrls(app, enriched);
-    return enriched;
+  return Promise.all(enriched.map((log) => {
+    const tasks = [];
+    if (log.video && !log.videoUrl) {
+      tasks.push(resolveVideoUrl(log.video).then((videoUrl) => {
+        if (videoUrl) log.videoUrl = videoUrl;
+      }));
+    }
+    return Promise.all(tasks).then(() => {
+      if (!log.videoUrl) return log;
+      return resolveVideoCoverUrl(log.videoUrl, log.videoCoverUrl || log.videoCover).then((videoCoverUrl) => {
+        if (videoCoverUrl) log.videoCoverUrl = videoCoverUrl;
+        return log;
+      });
+    });
+  })).then((resolved) => {
+    persistResolvedVideoUrls(app, resolved);
+    return resolved;
   });
 }
 

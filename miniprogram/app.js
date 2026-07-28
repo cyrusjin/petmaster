@@ -3,28 +3,34 @@ const { getDefaultWeightPricing } = require('./utils/weightPricing');
 const { getDefaultRoomPricing } = require('./utils/roomPricing');
 const auth = require('./utils/auth');
 const storeApi = require('./utils/store');
-const { API_BASE_URL } = require('./config/cloud');
-const { ensureLogin } = require('./utils/cloudCall');
-const { normalizeIsMerchant, resolveRole, isMerchantApproved, isMerchantPending, isMerchantRejected, isMerchantStaff, isStaffOfStore, isStoreOwner } = require('./utils/role');
+const { API_BASE_URL } = require('./config/api');
+const { ensureLogin } = require('./utils/api');
+const { normalizeIsMerchant, resolveRole, isMerchantApproved, isMerchantPending, isMerchantRejected, isMerchantStaff, isStaffOfStore, isStoreOwner, getMerchantStoreId, getVisitStoreId, hasMerchantCapability } = require('./utils/role');
 const { applyRoleShell: applyTabShell } = require('./utils/shell');
 const { mergeBillingRules, buildUserStoreView, prepareUserStoreView } = require('./utils/storeContext');
 const storeDebug = require('./utils/storeDebug');
-const { isCloudFileId } = require('./utils/cloudFile');
+const { isCloudFileId } = require('./utils/mediaResolve');
 const petApi = require('./utils/pet');
 const orderApi = require('./utils/order');
 const dailyApi = require('./utils/daily');
 const { dedupeDailyLogs, getLogId } = require('./utils/dailyLogUtil');
-const merchantDemo = require('./utils/merchantDemo');
 const badgeUtil = require('./utils/badge');
 const userFeed = require('./utils/userFeed');
-const { mergeMerchantShop } = require('./utils/storeSync');
 const { clearImageFileCache } = require('./utils/imageCache');
-const { attachOrderDisplayNo, attachStoreDisplayNo, buildRandomDisplayNo } = require('./utils/displayNo');
+const { resolveTargetEnvVersion } = require('./utils/miniProgramNavigate');
+const { attachOrderDisplayNo, attachStoreDisplayNo, buildOrderDisplayNo } = require('./utils/displayNo');
+
+function isDemoEntityId(id) {
+  return String(id || '').startsWith('demo_');
+}
+
+/** 商家独立小程序 AppID（员工邀请/入驻跳转） */
+const MERCHANT_MINI_PROGRAM_APPID = 'wx327ccf77cdedc252';
 
 const USER_INFO_TTL = 5 * 60 * 1000;
-const ORDERS_TTL = 15 * 1000;
-const DAILY_LOGS_TTL = 15 * 1000;
-const PETS_TTL = 30 * 1000;
+const ORDERS_TTL = 2 * 60 * 1000;
+const DAILY_LOGS_TTL = 2 * 60 * 1000;
+const PETS_TTL = 5 * 60 * 1000;
 const MERCHANT_STORE_TTL = 30 * 1000;
 
 App({
@@ -40,12 +46,13 @@ App({
     pendingEntryStoreId: '',
     pendingStaffInviteStoreId: '',
     merchantAccessRole: '',
-    cloudReady: false,
-    lastCloudError: ''
+    apiReady: false,
+    lastApiError: ''
   },
 
   onLaunch(options) {
     this._initCloud();
+    this._purgeLocalDemoData();
     this._loadAllData();
     this._restoreCachedStore();
     storeDebug.logEntryOptions('App onLaunch', options);
@@ -55,13 +62,14 @@ App({
       this._restoreUserClientMode();
       this._hydrateRoleFromUser(cachedUser);
     }
+    // 复用本地 token，仅后台刷新用户信息，避免冷启动重复 wx.login
     this._userInfoFetchedAt = 0;
     this._bootstrapSession(options);
   },
 
   onShow(options) {
     storeDebug.logEntryOptions('App onShow', options);
-    this._userInfoFetchedAt = 0;
+    // 切回前台不强制清 token / 重置 TTL，避免重复登录与串行拉数
     this._bootstrapSession(options);
   },
 
@@ -82,7 +90,7 @@ App({
   },
 
   _bootstrapSession(options) {
-    return this.ensureCloudAndLogin({ force: true })
+    return this.ensureCloudAndLogin({ silent: true })
       .then(() => {
         this._reconcileClientModeFromCloudUser();
         this._handleEntryOptions(options);
@@ -114,7 +122,7 @@ App({
 
   _reconcileClientModeFromCloudUser() {
     const user = this.globalData.userInfo;
-    if (isMerchantApproved(user)) {
+    if (isMerchantApproved(user) && !this.isUserClientMode()) {
       wx.removeStorageSync(STORAGE_KEYS.USER_CLIENT_MODE);
       this._storeVisitEntry = false;
       this.globalData.isMerchant = true;
@@ -128,8 +136,8 @@ App({
     }
     if (this.getData(STORAGE_KEYS.USER_CLIENT_MODE)) {
       this._storeVisitEntry = true;
-      this.globalData.isMerchant = false;
       this.globalData.role = 'user';
+      this.globalData.isMerchant = hasMerchantCapability(user);
     }
   },
 
@@ -139,7 +147,7 @@ App({
   },
 
   shouldIgnoreShareEntry() {
-    return this.isMerchantBackendUser();
+    return false;
   },
 
   _entryOptionsSignature(options) {
@@ -153,22 +161,70 @@ App({
   },
 
   _redirectStaffInviteIfNeeded(storeId) {
-    const pages = getCurrentPages();
-    const route = pages.length ? pages[pages.length - 1].route : '';
-    if (route === 'pages/merchant/tab-daily/tab-daily') return;
-    wx.reLaunch({
-      url: `/pages/merchant/tab-daily/tab-daily?staff_invite=1&store_id=${encodeURIComponent(storeId)}`
+    wx.showModal({
+      title: '员工邀请',
+      content: '商家端已独立。请打开「宠大师商家端」小程序接受邀请。',
+      confirmText: '打开商家端',
+      success: (res) => {
+        if (!res.confirm) return;
+        wx.navigateToMiniProgram({
+          appId: MERCHANT_MINI_PROGRAM_APPID,
+          path: `pages/merchant/tab-daily/tab-daily?staff_invite=1&store_id=${encodeURIComponent(storeId)}`,
+          envVersion: resolveTargetEnvVersion(),
+          fail: () => {
+            wx.showToast({ title: '请搜索打开商家端小程序', icon: 'none' });
+          }
+        });
+      }
     });
   },
 
   _initCloud() {
     const baseUrl = (API_BASE_URL || '').trim();
     if (!baseUrl) {
-      console.error('[API] 请在 miniprogram/config/cloud.js 配置 API_BASE_URL');
+      console.error('[API] 请在 miniprogram/config/api.js 配置 API_BASE_URL');
       this.globalData.env = '';
       return;
     }
     this.globalData.env = baseUrl;
+  },
+
+  _purgeLocalDemoData() {
+    const demoKeys = [
+      STORAGE_KEYS.DEMO_INITIALIZED,
+      STORAGE_KEYS.DEMO_ORDERS,
+      STORAGE_KEYS.DEMO_PETS,
+      STORAGE_KEYS.DEMO_DAILY_LOGS,
+      STORAGE_KEYS.DEMO_SHOP,
+      STORAGE_KEYS.DEMO_APPLY_DRAFT,
+      STORAGE_KEYS.DEMO_CONTRACTS
+    ];
+    demoKeys.forEach((key) => {
+      try {
+        wx.removeStorageSync(key);
+      } catch (err) {
+        // ignore
+      }
+    });
+
+    const stripDemo = (list) => (
+      Array.isArray(list)
+        ? list.filter((item) => !isDemoEntityId(
+          (item && (item.id || item.order_id || item.pet_id)) || ''
+        ))
+        : []
+    );
+
+    try {
+      const pets = stripDemo(wx.getStorageSync(STORAGE_KEYS.PETS));
+      const orders = stripDemo(wx.getStorageSync(STORAGE_KEYS.ORDERS));
+      const logs = stripDemo(wx.getStorageSync(STORAGE_KEYS.DAILY_LOGS));
+      wx.setStorageSync(STORAGE_KEYS.PETS, pets);
+      wx.setStorageSync(STORAGE_KEYS.ORDERS, orders);
+      wx.setStorageSync(STORAGE_KEYS.DAILY_LOGS, logs);
+    } catch (err) {
+      console.warn('[demo] 清理本地演示数据失败', err);
+    }
   },
 
   _bootstrapCloud() {
@@ -187,7 +243,7 @@ App({
             if (dailyRes && !dailyRes.success) {
               console.error('[API] 初始化打卡数据表失败', dailyRes.errMsg);
             }
-            this.globalData.cloudReady = true;
+            this.globalData.apiReady = true;
             return true;
           });
       })
@@ -201,6 +257,11 @@ App({
     if (!options) return '';
     const query = options.query || {};
     if (query.store_id) return query.store_id;
+
+    const extra = options.referrerInfo && options.referrerInfo.extraData;
+    if (extra && extra.store_id) {
+      return String(extra.store_id).trim();
+    }
 
     if (query.scene) {
       const sceneParam = decodeURIComponent(String(query.scene));
@@ -286,45 +347,41 @@ App({
     if (!this.isUserClientMode()) return;
     const pages = getCurrentPages();
     const route = pages.length ? pages[pages.length - 1].route : '';
-    const merchantEntryRoutes = [
-      'pages/merchant/apply/apply',
-      'pages/merchant/tab-daily/tab-daily',
-      'pages/merchant/tab-store/tab-store'
-    ];
-    if (!route || merchantEntryRoutes.includes(route)) {
+    if (!route || route === 'pages/index/index') {
       wx.switchTab({ url: '/pages/index/index' });
     }
   },
 
   enterMerchantMode() {
-    this._storeVisitEntry = false;
-    wx.removeStorageSync(STORAGE_KEYS.USER_CLIENT_MODE);
-    this.globalData.role = 'merchant';
-    this.globalData.isMerchant = isMerchantApproved(this.globalData.userInfo);
-    applyTabShell();
+    this.openMerchantMiniProgram();
   },
 
   extractStoreIdFromOptions(options) {
     return this._extractStoreId(options);
   },
 
-  enterUserStore(storeId) {
+  enterUserStore(storeId, options = {}) {
     if (!storeId) return Promise.resolve(null);
     const currentId = this.getStoreId();
-    storeDebug.log('enterUserStore', { storeId, currentId });
-    return this.ensureCloudAndLogin({ force: true })
+    const forceData = options.forceData !== false;
+    storeDebug.log('enterUserStore', { storeId, currentId, forceData });
+    this._lastHandledEntrySignature = '';
+    if (forceData || storeId !== currentId) {
+      this._ordersFetchedAt = 0;
+      this._petsFetchedAt = 0;
+    }
+    return this.ensureCloudAndLogin({ silent: true })
       .then(() => {
         if (this.shouldIgnoreShareEntry()) {
           return null;
         }
         if (this.isStaffForStore(storeId)) {
           this._keepStaffMerchantMode();
-          wx.showToast({ title: '您已是本店员工', icon: 'none' });
-          wx.reLaunch({ url: '/pages/merchant/tab-daily/tab-daily' });
+          wx.showToast({ title: '请使用商家端小程序管理本店', icon: 'none' });
           return null;
         }
         this._enterUserClientMode(storeId);
-        return this.bindStore(storeId, { syncUser: false, force: true })
+        return this.bindStore(storeId, { syncUser: false, force: forceData })
           .then(() => this._flushPendingStoreBinding());
       });
   },
@@ -377,7 +434,7 @@ App({
           this._enterUserClientMode(storeId, { applyShell: this._isUserEntryPath(options) });
         }
       }
-      this.bindStore(storeId, { syncUser: false, force: storeId !== currentId });
+      this.bindStore(storeId, { syncUser: false, force: true });
     }
 
     if (signature) {
@@ -518,13 +575,13 @@ App({
           const user = {
             ...(this.globalData.userInfo || {}),
             ...res.user,
-            store_id: res.user.store_id || storeId,
-            isMerchant: false,
-            role: 'user'
+            visitStoreId: res.user.visitStoreId || storeId,
+            store_id: res.user.visitStoreId || res.user.store_id || storeId
           };
+          const merchantCap = hasMerchantCapability(user);
           this.globalData.userInfo = user;
-          this.globalData.isMerchant = false;
-          this.globalData.role = 'user';
+          this.globalData.isMerchant = merchantCap;
+          this.globalData.role = this.isUserClientMode() ? 'user' : (merchantCap ? 'merchant' : 'user');
           this.setData(STORAGE_KEYS.USER, user);
           this._enterUserClientMode(storeId, { applyShell: false });
         } else {
@@ -568,129 +625,14 @@ App({
     return loader.then(() => prepareUserStoreView(this.getCurrentStore()));
   },
 
-  ensureMerchantStore(options = {}) {
-    const force = !!(options && options.force);
-
-    if (this.isMerchantDemoMode() && !this.isMerchantPending()) {
-      merchantDemo.ensureDemoData();
-      const shop = merchantDemo.getDemoShop();
-      this.globalData.merchantStoreId = shop.store_id;
-      return Promise.resolve(shop);
-    }
-
-    const shop = this.getShop();
-
-    if (!this.globalData.env) {
-      return Promise.resolve(shop);
-    }
-
-    if (this._merchantStorePromise) {
-      return this._merchantStorePromise;
-    }
-
-    const cacheFresh = !force
-      && this._merchantStoreFetchedAt
-      && Date.now() - this._merchantStoreFetchedAt < MERCHANT_STORE_TTL;
-
-    if (cacheFresh && shop.store_id) {
-      return Promise.resolve(shop);
-    }
-
-    this._merchantStorePromise = this._fetchMerchantStoreFromCloud()
-      .then((result) => {
-        this._merchantStoreFetchedAt = Date.now();
-        return result;
-      })
-      .finally(() => {
-        this._merchantStorePromise = null;
-      });
-    return this._merchantStorePromise;
-  },
-
-  refreshMerchantStore() {
-    this._merchantStoreFetchedAt = 0;
-    return this.ensureMerchantStore({ force: true });
-  },
-
-  _fetchMerchantStoreFromCloud() {
-    const localShop = this.getShop() || {};
-    return storeApi.getMyStore()
-      .then((res) => {
-        if (res.success && res.store) {
-          const merged = mergeMerchantShop(localShop, {
-            ...res.store,
-            store_id: res.store.store_id
-          });
-          this.saveShop(merged);
-          this.globalData.merchantStoreId = merged.store_id;
-          this.globalData.merchantAccessRole = res.accessRole || (
-            isStoreOwner(this.globalData.userInfo) ? 'owner' : 'staff'
-          );
-          this._merchantStoreFetchedAt = Date.now();
-          if (merged.billingRules && Object.keys(merged.billingRules).length) {
-            const localRules = this.getBillingRules();
-            this.saveBillingRules({ ...localRules, ...merged.billingRules });
-          }
-          return merged;
-        }
-        if (res && res.errMsg) {
-          console.error('[店铺] 拉取云端店铺失败', res.errMsg);
-        }
-        if (localShop.store_id) {
-          console.warn('[店铺] 云端未返回店铺，保留本地缓存');
-          return localShop;
-        }
-        this.clearMerchantLocalCache();
-        return {};
-      })
-      .catch((err) => {
-        console.error('fetchMerchantStore failed', err);
-        return localShop.store_id ? localShop : (this.getShop() || {});
-      });
-  },
-
-  syncShopToCloud(shop) {
-    if (this.isMerchantDemoMode() && !this.isMerchantPending()) {
-      const saved = merchantDemo.saveDemoShop(shop);
-      this.globalData.merchantStoreId = saved.store_id;
-      this._merchantStoreFetchedAt = Date.now();
-      return Promise.resolve(saved);
-    }
-    if (!this.globalData.env) {
-      this.saveShop(shop);
-      this._merchantStoreFetchedAt = Date.now();
-      return Promise.resolve(shop);
-    }
-    return storeApi.saveStore(shop)
-      .then((res) => {
-        if (res.success && res.store) {
-          const localShop = this.getShop() || {};
-          const merged = mergeMerchantShop(localShop, {
-            ...shop,
-            ...res.store,
-            store_id: res.store.store_id
-          });
-          this.saveShop(merged);
-          this.globalData.merchantStoreId = merged.store_id;
-          this._merchantStoreFetchedAt = Date.now();
-          auth.setMerchantProfile(res.store.store_id).catch((err) => {
-            console.error('setMerchantProfile failed', err);
-          });
-          return merged;
-        }
-        const errMsg = (res && res.errMsg) || '保存店铺失败';
-        return Promise.reject(new Error(errMsg));
-      });
-  },
-
   _loadAllData() {
     Object.values(STORAGE_KEYS).forEach((key) => {
       this.globalData[key] = wx.getStorageSync(key) || null;
     });
   },
 
-  _applyCloudUser(cloudUser, meta = {}) {
-    const approved = isMerchantApproved(cloudUser);
+  _applyRemoteUser(remoteUser, meta = {}) {
+    const approved = isMerchantApproved(remoteUser);
     const isMerchant = approved;
     const role = isMerchant ? 'merchant' : 'user';
     this.globalData.isLoggedIn = true;
@@ -698,33 +640,37 @@ App({
 
     const cached = this.globalData.userInfo || {};
     const prevApproved = isMerchantApproved(cached);
-    const pickCloudString = (key) => (
-      Object.prototype.hasOwnProperty.call(cloudUser, key)
-        ? (cloudUser[key] || '')
+    const pickRemoteString = (key) => (
+      Object.prototype.hasOwnProperty.call(remoteUser, key)
+        ? (remoteUser[key] || '')
         : (cached[key] || '')
     );
+    const merchantStoreId = pickRemoteString('merchantStoreId') || getMerchantStoreId(remoteUser) || getMerchantStoreId(cached);
+    const visitStoreId = pickRemoteString('visitStoreId') || getVisitStoreId(remoteUser) || getVisitStoreId(cached);
     const user = {
-      openid: cloudUser.openid || meta.requestOpenid || cached.openid || '',
-      nickName: cloudUser.nickName || cached.nickName || '微信用户',
-      avatarUrl: cloudUser.avatarUrl || cached.avatarUrl || '',
-      phone: cloudUser.phone || cached.phone || '',
-      realName: cloudUser.realName || cached.realName || '',
-      idCard: cloudUser.idCard || cached.idCard || '',
-      address: cloudUser.address || cached.address || '',
-      store_id: pickCloudString('store_id'),
-      pet_ids: Array.isArray(cloudUser.pet_ids) ? cloudUser.pet_ids : (cached.pet_ids || []),
-      merchantStatus: pickCloudString('merchantStatus'),
-      merchantRole: pickCloudString('merchantRole'),
+      openid: remoteUser.openid || meta.requestOpenid || cached.openid || '',
+      nickName: remoteUser.nickName || cached.nickName || '',
+      avatarUrl: remoteUser.avatarUrl || cached.avatarUrl || '',
+      phone: remoteUser.phone || cached.phone || '',
+      realName: remoteUser.realName || cached.realName || '',
+      idCard: remoteUser.idCard || cached.idCard || '',
+      address: remoteUser.address || cached.address || '',
+      merchantStoreId,
+      visitStoreId,
+      store_id: visitStoreId,
+      pet_ids: Array.isArray(remoteUser.pet_ids) ? remoteUser.pet_ids : (cached.pet_ids || []),
+      merchantStatus: pickRemoteString('merchantStatus'),
+      merchantRole: pickRemoteString('merchantRole'),
       role,
       isMerchant,
-      createTime: cloudUser.createTime || cached.createTime || Date.now()
+      hasMerchantCapability: isMerchant,
+      createTime: remoteUser.createTime || cached.createTime || Date.now()
     };
 
-    if (this.isUserClientMode() && !(isMerchantStaff(user) && isMerchantApproved(user))) {
-      user.isMerchant = false;
+    if (this.isUserClientMode()) {
       user.role = 'user';
       this.globalData.role = 'user';
-      this.globalData.isMerchant = false;
+      this.globalData.isMerchant = isMerchant;
     } else {
       if (isMerchantStaff(user) && isMerchantApproved(user)) {
         wx.removeStorageSync(STORAGE_KEYS.USER_CLIENT_MODE);
@@ -732,9 +678,6 @@ App({
       }
       this.globalData.role = role;
       this.globalData.isMerchant = isMerchant;
-      if (!prevApproved && isMerchantApproved(user)) {
-        merchantDemo.onMerchantApproved(this);
-      }
     }
 
     this.globalData.userInfo = user;
@@ -746,28 +689,17 @@ App({
       store_id: user.store_id,
       meta
     });
-    storeDebug.logStoreState('_applyCloudUser', this);
+    storeDebug.logStoreState('_applyRemoteUser', this);
 
     const storeIdToBind = this.isUserClientMode()
-      ? (this.getStoreId() || user.store_id)
-      : (!user.isMerchant && user.store_id && !isMerchantPending(user) ? user.store_id : '');
+      ? (this.getStoreId() || visitStoreId)
+      : (visitStoreId && !isMerchantPending(user) ? visitStoreId : '');
 
     if (storeIdToBind) {
       this.bindStore(storeIdToBind, { syncUser: false, force: this.isUserClientMode() });
-    } else if (user.isMerchant && user.store_id) {
-      this.globalData.merchantStoreId = user.store_id;
-    } else if (isMerchantPending(user) && user.store_id) {
-      this.globalData.merchantStoreId = user.store_id;
     }
 
-    if (user.isMerchant) {
-      this.ensureMerchantStore().then((shop) => {
-        if (shop && shop.store_id) {
-          this.globalData.merchantStoreId = shop.store_id;
-        }
-      });
-    } else if (!isMerchantPending(user)) {
-      this.clearMerchantLocalCache();
+    if (!isMerchantPending(user)) {
       const cachedPets = this.getPets();
       const petIds = Array.isArray(user.pet_ids) ? user.pet_ids : [];
       const petsStale = !this._petsFetchedAt || Date.now() - this._petsFetchedAt > PETS_TTL;
@@ -791,7 +723,7 @@ App({
     this.globalData.userInfo = null;
     this.globalData.role = 'user';
     this.globalData.isMerchant = false;
-    this.globalData.cloudReady = false;
+    this.globalData.apiReady = false;
     this._storeVisitEntry = false;
     this._userInfoFetchedAt = 0;
     return this.ensureCloudAndLogin();
@@ -799,7 +731,7 @@ App({
 
   ensureCloudAndLogin(options = {}) {
     if (!this.globalData.env) {
-      this.globalData.lastCloudError = 'API 未配置，请检查 config/cloud.js';
+      this.globalData.lastApiError = 'API 未配置，请检查 config/api.js';
       return this.silentLogin(options);
     }
     return this.silentLogin(options);
@@ -847,15 +779,15 @@ App({
     this._backgroundRefreshPromise = auth.getUserInfo()
       .then((res) => {
         if (res.success && res.user) {
-          this.globalData.lastCloudError = '';
-          this.globalData.cloudReady = true;
+          this.globalData.lastApiError = '';
+          this.globalData.apiReady = true;
           this._userInfoFetchedAt = Date.now();
           const meta = {
             requestOpenid: res.requestOpenid,
             matchedCount: res.matchedCount,
             dbIsMerchant: res.dbIsMerchant
           };
-          return this._applyCloudUser(res.user, meta);
+          return this._applyRemoteUser(res.user, meta);
         }
         return this._resolveCachedRole();
       })
@@ -873,8 +805,8 @@ App({
     return auth.getUserInfo()
       .then((res) => {
         if (res.success && res.user) {
-          this.globalData.lastCloudError = '';
-          this.globalData.cloudReady = true;
+          this.globalData.lastApiError = '';
+          this.globalData.apiReady = true;
           this._userInfoFetchedAt = Date.now();
           if (res.deduped) {
             console.log('[auth] 已自动合并重复用户记录');
@@ -884,7 +816,7 @@ App({
             matchedCount: res.matchedCount,
             dbIsMerchant: res.dbIsMerchant
           };
-          return this._applyCloudUser(res.user, meta);
+          return this._applyRemoteUser(res.user, meta);
         }
         return this._resolveCachedRole();
       });
@@ -894,9 +826,9 @@ App({
     if (!this.globalData.env) {
       this.globalData.role = 'user';
       this.globalData.isMerchant = false;
-      this.globalData.lastCloudError = this.globalData.lastCloudError || 'API 未连接';
+      this.globalData.lastApiError = this.globalData.lastApiError || 'API 未连接';
       if (!this.globalData.userInfo) {
-        this.globalData.userInfo = { nickName: '微信用户', role: 'user', isMerchant: false, merchantStatus: '' };
+        this.globalData.userInfo = { nickName: '', role: 'user', isMerchant: false, merchantStatus: '' };
       }
       return Promise.resolve('user');
     }
@@ -917,7 +849,7 @@ App({
       return this._fetchCloudUser()
         .catch((err) => {
           const errMsg = (err && (err.errMsg || err.message)) || '接口调用异常';
-          this.globalData.lastCloudError = errMsg;
+          this.globalData.lastApiError = errMsg;
           console.error('[API] silentLogin 失败', err);
           if (this.isUserClientMode()) {
             applyTabShell();
@@ -932,12 +864,12 @@ App({
 
     return ensureLogin(force).then(afterLogin).catch((err) => {
       const errMsg = (err && (err.errMsg || err.message)) || '登录失败';
-      this.globalData.lastCloudError = errMsg;
+      this.globalData.lastApiError = errMsg;
       console.error('[API] ensureLogin 失败', err);
       this.globalData.role = 'user';
       this.globalData.isMerchant = false;
       if (!this.globalData.userInfo) {
-        this.globalData.userInfo = { nickName: '微信用户', role: 'user', isMerchant: false, merchantStatus: '' };
+        this.globalData.userInfo = { nickName: '', role: 'user', isMerchant: false, merchantStatus: '' };
       }
       applyTabShell();
       return 'user';
@@ -953,17 +885,26 @@ App({
   },
 
   isMerchantDemoMode() {
-    if (this.isUserClientMode && this.isUserClientMode()) return false;
-    return merchantDemo.isMerchantDemoMode(this.globalData.userInfo);
+    return false;
   },
 
   canAccessMerchantBackend() {
-    if (this.isUserClientMode && this.isUserClientMode()) return false;
-    const user = this.globalData.userInfo;
-    if (isMerchantApproved(user)) return true;
-    if (merchantDemo.isMerchantDemoMode(user)) return true;
-    if (isMerchantPending(user) || isMerchantRejected(user)) return true;
     return false;
+  },
+
+  openMerchantMiniProgram(path = 'pages/merchant/tab-daily/tab-daily') {
+    return new Promise((resolve) => {
+      wx.navigateToMiniProgram({
+        appId: MERCHANT_MINI_PROGRAM_APPID,
+        path,
+        envVersion: resolveTargetEnvVersion(),
+        success: resolve,
+        fail: (err) => {
+          wx.showToast({ title: '请搜索打开商家端小程序', icon: 'none' });
+          resolve(err);
+        }
+      });
+    });
   },
 
   isStoreOwner() {
@@ -1007,42 +948,6 @@ App({
     applyTabShell();
   },
 
-  acceptStaffInvite(storeId) {
-    const id = (storeId || '').trim();
-    if (!id) return Promise.resolve(false);
-    if (!this.globalData.env) {
-      wx.showToast({ title: '请先配置 API 地址', icon: 'none' });
-      return Promise.resolve(false);
-    }
-    wx.removeStorageSync(STORAGE_KEYS.USER_CLIENT_MODE);
-    this._storeVisitEntry = false;
-    this._userInfoFetchedAt = 0;
-    return storeApi.acceptStaffInvite(id)
-      .then((res) => {
-        if (!res || !res.success) {
-          wx.showToast({ title: (res && res.errMsg) || '加入失败', icon: 'none' });
-          return false;
-        }
-        if (res.accessRole) {
-          this.globalData.merchantAccessRole = res.accessRole;
-        }
-        if (res.store) {
-          this.saveShop(res.store);
-          this.globalData.merchantStoreId = res.store.store_id;
-        }
-        return this.forceRefreshRole().then(() => {
-          this.enterMerchantMode();
-          this._merchantStoreFetchedAt = 0;
-          wx.showToast({ title: res.alreadyOwner ? '您已是店铺负责人' : '已获得员工权限', icon: 'success' });
-          return true;
-        });
-      })
-      .catch((err) => {
-        wx.showToast({ title: (err && err.message) || '加入失败', icon: 'none' });
-        return false;
-      });
-  },
-
   refreshUserRole() {
     return this.silentLogin();
   },
@@ -1054,12 +959,6 @@ App({
   setData(key, value) {
     this.globalData[key] = value;
     wx.setStorageSync(key, value);
-  },
-
-  clearMerchantLocalCache() {
-    this.globalData.merchantStoreId = '';
-    this._merchantStoreFetchedAt = 0;
-    this.setData(STORAGE_KEYS.SHOP, {});
   },
 
   clearLocalAppCache() {
@@ -1115,14 +1014,16 @@ App({
 
     return auth.syncProfile(userInfo)
       .then((res) => {
-        if (res.success && res.user) {
-          return this._applyCloudUser(res.user);
+        this.globalData.lastApiError = '';
+        if (res.user) {
+          return this._applyRemoteUser(res.user);
         }
         return this.globalData.role;
       })
       .catch((err) => {
         console.error('updateProfile failed', err);
-        return this.globalData.role;
+        this.globalData.lastApiError = (err && err.message) || '保存失败';
+        return Promise.reject(err);
       });
   },
 
@@ -1131,10 +1032,6 @@ App({
   },
 
   getPets() {
-    if (this.isMerchantDemoMode()) {
-      merchantDemo.ensureDemoData();
-      return merchantDemo.getDemoPets();
-    }
     return this.getData(STORAGE_KEYS.PETS) || [];
   },
 
@@ -1211,7 +1108,7 @@ App({
         return localPets;
       })
       .catch((err) => {
-        console.error('[宠物] 拉取云端档案失败', err);
+        console.error('[宠物] 拉取服务端档案失败', err);
         return localPets;
       })
       .finally(() => {
@@ -1226,9 +1123,6 @@ App({
     }
     return petApi.savePet(pet)
       .then((res) => {
-        if (!res.success || !res.pet) {
-          throw new Error(res.errMsg || '保存失败');
-        }
         this._upsertLocalPet(res.pet);
         this._syncUserPetIds(res.pet.id, 'add');
         this._petsFetchedAt = 0;
@@ -1241,10 +1135,7 @@ App({
       return Promise.reject(new Error('API 未连接，无法删除'));
     }
     return petApi.deletePet(id)
-      .then((res) => {
-        if (!res.success) {
-          throw new Error(res.errMsg || '删除失败');
-        }
+      .then(() => {
         this._cachePets(this.getPets().filter((p) => p.id !== id));
         this._syncUserPetIds(id, 'remove');
         this._petsFetchedAt = 0;
@@ -1252,10 +1143,6 @@ App({
   },
 
   getOrders() {
-    if (this.isMerchantDemoMode()) {
-      merchantDemo.ensureDemoData();
-      return merchantDemo.getDemoOrders();
-    }
     return (this.getData(STORAGE_KEYS.ORDERS) || []).map(attachOrderDisplayNo);
   },
 
@@ -1275,10 +1162,6 @@ App({
 
   loadOrders(options = {}) {
     const force = !!(options && options.force);
-    if (this.isMerchantDemoMode()) {
-      merchantDemo.ensureDemoData();
-      return Promise.resolve(merchantDemo.getDemoOrders());
-    }
     if (!this.globalData.env) {
       return Promise.resolve(this.getOrders());
     }
@@ -1289,22 +1172,7 @@ App({
       return this._loadOrdersPromise;
     }
 
-    const loader = this.globalData.isMerchant
-      ? (() => {
-        const storeId = this.globalData.merchantStoreId
-          || (this.getShop() && this.getShop().store_id);
-        if (storeId) {
-          return orderApi.listMerchantOrders(storeId);
-        }
-        return this.ensureMerchantStore().then((shop) => {
-          const sid = (shop && shop.store_id) || this.globalData.merchantStoreId;
-          if (!sid) return { success: false };
-          return orderApi.listMerchantOrders(sid);
-        });
-      })()
-      : orderApi.listUserOrders();
-
-    this._loadOrdersPromise = loader
+    this._loadOrdersPromise = orderApi.listUserOrders()
       .then((res) => {
         if (res && res.success && Array.isArray(res.orders)) {
           this._cacheOrders(res.orders);
@@ -1312,12 +1180,12 @@ App({
           return res.orders;
         }
         if (res && res.errMsg) {
-          console.error('[订单] 拉取云端订单失败', res.errMsg);
+          console.error('[订单] 拉取服务端订单失败', res.errMsg);
         }
         return this.getOrders();
       })
       .catch((err) => {
-        console.error('[订单] 拉取云端订单失败', err);
+        console.error('[订单] 拉取服务端订单失败', err);
         return this.getOrders();
       })
       .finally(() => {
@@ -1333,6 +1201,7 @@ App({
 
   syncUserFeed(options = {}) {
     const force = !!(options && options.force);
+    const skipDailyLogs = !!(options && options.skipDailyLogs);
     this.refreshUserBadges();
 
     if (this.canAccessMerchantBackend() && !this.isUserClientMode()) {
@@ -1349,6 +1218,18 @@ App({
     const run = () => this.ensureCloudAndLogin({ silent: true })
       .then(() => this.loadOrders({ force }))
       .then(() => {
+        if (skipDailyLogs) {
+          this.refreshUserBadges();
+          // 动态日志不阻塞首页，后台补齐角标
+          const orders = this.getUserScopedOrders();
+          const boardingIds = userFeed.getUserBoardingOrderIds(orders);
+          if (boardingIds.length) {
+            this.loadDailyLogsForOrders(boardingIds, { force: false })
+              .then(() => this.refreshUserBadges())
+              .catch(() => {});
+          }
+          return null;
+        }
         const orders = this.getUserScopedOrders();
         const boardingIds = userFeed.getUserBoardingOrderIds(orders);
         if (!boardingIds.length) return this.getDailyLogs();
@@ -1412,8 +1293,10 @@ App({
       if (idx >= 0) orders[idx] = order;
       else orders.push(order);
     } else {
+      const currentStore = this.globalData.currentStore || this.getShop() || {};
+      const storeDisplayNo = currentStore.displayNo || order.storeDisplayNo || '';
       order.id = `ord_${Date.now()}`;
-      order.displayNo = order.displayNo || buildRandomDisplayNo(10);
+      order.displayNo = order.displayNo || buildOrderDisplayNo(storeDisplayNo);
       order.status = order.status || 'pending';
       order.createTime = Date.now();
       orders.push(order);
@@ -1428,21 +1311,13 @@ App({
       const idx = orders.findIndex((o) => o.id === id);
       if (idx >= 0) {
         Object.assign(orders[idx], updates);
-        if (this.isMerchantDemoMode()) {
-          wx.setStorageSync(STORAGE_KEYS.DEMO_ORDERS, orders);
-        } else {
-          this._cacheOrders(orders);
-        }
+        this._cacheOrders(orders);
         return orders[idx];
       }
       return null;
     };
 
-    if (this.isMerchantDemoMode()) {
-      return Promise.resolve(merchantDemo.updateDemoOrder(id, updates));
-    }
-
-    if (merchantDemo.isDemoEntityId(id)) {
+    if (isDemoEntityId(id)) {
       return Promise.resolve(null);
     }
 
@@ -1474,10 +1349,6 @@ App({
   },
 
   getContracts() {
-    if (this.isMerchantDemoMode()) {
-      merchantDemo.ensureDemoData();
-      return merchantDemo.getDemoContracts();
-    }
     return this.getData(STORAGE_KEYS.CONTRACTS) || [];
   },
 
@@ -1491,9 +1362,6 @@ App({
   },
 
   saveContract(contract) {
-    if (this.isMerchantDemoMode()) {
-      return merchantDemo.saveDemoContract(contract);
-    }
     const contracts = this.getData(STORAGE_KEYS.CONTRACTS) || [];
     if (!contract.id) contract.id = 'ctr_' + Date.now();
     contract.createTime = contract.createTime || Date.now();
@@ -1505,15 +1373,6 @@ App({
   },
 
   updateContract(id, updates) {
-    if (this.isMerchantDemoMode()) {
-      const contracts = merchantDemo.getDemoContracts();
-      const idx = contracts.findIndex((c) => c.id === id);
-      if (idx >= 0) {
-        Object.assign(contracts[idx], updates);
-        wx.setStorageSync(STORAGE_KEYS.DEMO_CONTRACTS, contracts);
-      }
-      return;
-    }
     const contracts = this.getContracts();
     const idx = contracts.findIndex((c) => c.id === id);
     if (idx >= 0) {
@@ -1523,17 +1382,10 @@ App({
   },
 
   getDailyLogs() {
-    if (this.isMerchantDemoMode()) {
-      merchantDemo.ensureDemoData();
-      return merchantDemo.getDemoDailyLogs();
-    }
     return this.getData(STORAGE_KEYS.DAILY_LOGS) || [];
   },
 
   saveDailyLog(log) {
-    if (this.isMerchantDemoMode()) {
-      return Promise.resolve(merchantDemo.saveDemoDailyLog(log));
-    }
     if (!this.globalData.env) {
       return Promise.resolve(this._saveDailyLogLocal(log));
     }
@@ -1581,7 +1433,7 @@ App({
         return dedupeDailyLogs(res.logs);
       })
       .catch((err) => {
-        console.error('[打卡] 拉取云端记录失败', err);
+        console.error('[打卡] 拉取服务端记录失败', err);
         return dedupeDailyLogs(this.getDailyLogs().filter(matchOrder));
       });
   },
@@ -1641,26 +1493,12 @@ App({
   },
 
   getShop() {
-    if (this.isMerchantDemoMode() && !this.isMerchantPending()) {
-      merchantDemo.ensureDemoData();
-      return attachStoreDisplayNo(merchantDemo.getDemoShop());
-    }
     return attachStoreDisplayNo(this.getData(STORAGE_KEYS.SHOP) || {});
   },
 
   saveShop(shop) {
     const normalized = attachStoreDisplayNo(shop || {});
-    if (this.isMerchantDemoMode() && !this.isMerchantPending()) {
-      const saved = merchantDemo.saveDemoShop(normalized);
-      this.globalData.merchantStoreId = saved.store_id;
-      this._merchantStoreFetchedAt = Date.now();
-      return attachStoreDisplayNo(saved);
-    }
     this.setData(STORAGE_KEYS.SHOP, normalized);
-    if (normalized && normalized.store_id) {
-      this.globalData.merchantStoreId = normalized.store_id;
-      this._merchantStoreFetchedAt = Date.now();
-    }
     return normalized;
   },
 

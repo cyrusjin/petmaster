@@ -159,9 +159,17 @@ Page({
 
     return loadStore.then(() => {
       const store = app.getUserStoreView();
-      if (!store) {
+      if (!store || !storeId) {
         this.setData({ store: null });
-        wx.showToast({ title: '请先通过店铺分享链接进入', icon: 'none' });
+        wx.showModal({
+          title: '暂无法预约',
+          content: '您还未绑定店铺，请先通过商家分享链接进入店铺后再预约服务。',
+          showCancel: false,
+          confirmText: '我知道了',
+          success: () => {
+            wx.navigateBack({ fail: () => {} });
+          }
+        });
         return;
       }
 

@@ -1,4 +1,6 @@
 const db = require('../db');
+const identity = require('./identity');
+const userFields = require('./userFields');
 
 function normalizeIsMerchant(value) {
   if (value === true || value === 1) return true;
@@ -76,6 +78,33 @@ function deriveDisplayNo(seed, length = 10) {
     out += DISPLAY_CODE_CHARS[state % DISPLAY_CODE_CHARS.length];
   }
   return out;
+}
+
+function resolveStoreDisplayNo(doc) {
+  if (!doc) return '';
+  if (doc.displayNo) return String(doc.displayNo).trim();
+  const seed = doc.store_id || '';
+  return seed ? deriveDisplayNo(`store:${seed}`, 8) : '';
+}
+
+function formatOrderDisplayTime(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    String(date.getFullYear()) +
+    pad(date.getMonth() + 1) +
+    pad(date.getDate()) +
+    pad(date.getHours()) +
+    pad(date.getMinutes()) +
+    pad(date.getSeconds())
+  );
+}
+
+/** 订单号：店铺编号 + yyyyMMddHHmmss + 4位随机 */
+function buildOrderDisplayNo(storeDisplayNo, now = Date.now()) {
+  const storePart = String(storeDisplayNo || '').trim() || '00000000';
+  const timePart = formatOrderDisplayTime(new Date(now));
+  const randomPart = buildRandomDisplayNo(4);
+  return `${storePart}${timePart}${randomPart}`;
 }
 
 function resolveOrderDisplayNo(doc) {
@@ -220,7 +249,7 @@ function validateCreatePayload(order) {
   return '';
 }
 
-function buildOrderData(order, userOpenid, merchantOpenid, userProfile) {
+function buildOrderData(order, userOpenid, merchantOpenid, userProfile, storeDisplayNo) {
   const now = Date.now();
   const fees = normalizeOrderFees({
     boardingFee: order.boardingFee,
@@ -230,7 +259,7 @@ function buildOrderData(order, userOpenid, merchantOpenid, userProfile) {
   });
   return {
     order_id: buildOrderId(),
-    displayNo: buildRandomDisplayNo(10),
+    displayNo: buildOrderDisplayNo(storeDisplayNo, now),
     store_id: order.store_id,
     merchantOpenid,
     userOpenid,
@@ -314,7 +343,13 @@ async function createOrder(event, openid) {
     }
   }
 
-  const orderData = buildOrderData(payload, openid, merchantOpenid, event.userProfile || {});
+  const orderData = buildOrderData(
+    payload,
+    openid,
+    merchantOpenid,
+    event.userProfile || {},
+    resolveStoreDisplayNo(store)
+  );
   await db.insertOne('orders', orderData);
 
   return { success: true, order: formatOrder(orderData) };
@@ -338,7 +373,9 @@ async function fetchPetsMap(petIds) {
 async function listUserOrders(openid) {
   if (!openid) return { success: false, errMsg: '无法获取用户身份' };
 
-  const data = await db.findMany('orders', { userOpenid: openid }, { limit: 100 });
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  const openids = user ? identity.collectOpenids(user) : [openid];
+  const data = await db.findMany('orders', { userOpenid: { $in: openids } }, { limit: 100 });
   const sorted = (data || []).sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
   const petMap = await fetchPetsMap(sorted.map((item) => item.petId));
   return {
@@ -349,10 +386,23 @@ async function listUserOrders(openid) {
 
 async function isMerchantUser(openid, storeId) {
   if (!openid || !storeId) return false;
-  const data = await db.findMany('users', { openid }, { limit: 20 });
-  return (data || []).some((doc) => (
-    normalizeIsMerchant(doc.isMerchant) && doc.store_id === storeId
-  ));
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  if (!user) return false;
+  if (userFields.resolveMerchantStoreId(user) === storeId
+    && userFields.isMerchantApprovedFromDoc(user)) {
+    return true;
+  }
+  const openids = identity.collectOpenids(user);
+  const owned = await db.findMany('stores', {
+    store_id: storeId,
+    ownerOpenid: { $in: openids }
+  }, { limit: 1 });
+  if (owned.length) return true;
+  const staff = await db.findMany('stores', {
+    store_id: storeId,
+    staffOpenids: { $in: openids }
+  }, { limit: 1 });
+  return staff.length > 0;
 }
 
 async function canManageOrder(order, openid) {
@@ -378,7 +428,11 @@ async function canManageOrder(order, openid) {
     return true;
   }
 
-  const ownedStores = await db.findMany('stores', { ownerOpenid: openid, store_id: storeId }, { limit: 1 });
+  const openids = identity.collectOpenids(await identity.findPrimaryUserByOpenid(openid) || openid);
+  const ownedStores = await db.findMany('stores', {
+    ownerOpenid: { $in: openids },
+    store_id: storeId
+  }, { limit: 1 });
   return ownedStores.length > 0;
 }
 
@@ -416,7 +470,9 @@ async function updateOrder(event, openid) {
 
   const existing = data[0];
   const isMerchant = await canManageOrder(existing, openid);
-  const isUser = existing.userOpenid === openid;
+  const userDoc = await identity.findPrimaryUserByOpenid(openid);
+  const openids = userDoc ? identity.collectOpenids(userDoc) : [openid];
+  const isUser = openids.includes(existing.userOpenid);
 
   if (!isMerchant && !isUser) {
     return { success: false, errMsg: '无权操作该订单' };

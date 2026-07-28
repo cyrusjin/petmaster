@@ -1,6 +1,8 @@
 const db = require('../db');
 const oss = require('../oss');
 const { canManageOrder } = require('./orderService');
+const identity = require('./identity');
+const userFields = require('./userFields');
 
 const DAILY_LOGS_COLLECTION = 'daily_logs';
 
@@ -25,6 +27,7 @@ function formatLog(doc) {
     description: doc.description || '',
     images: Array.isArray(doc.images) ? doc.images : [],
     video: doc.video || '',
+    videoCover: doc.videoCover || '',
     notifyOwner: !!(doc.notifyOwner || doc.isAbnormal),
     isAbnormal: !!(doc.notifyOwner || doc.isAbnormal),
     time: doc.time || '',
@@ -46,10 +49,15 @@ async function enrichLogsMedia(logs) {
     const images = await oss.resolveMediaUrls(sanitizeMediaList(log.images));
     const videoId = sanitizeMediaField(log.video);
     const videoUrl = videoId ? (await oss.resolveMediaUrl(videoId)) : '';
+    const videoCoverId = sanitizeMediaField(log.videoCover);
+    const videoCoverUrl = videoUrl
+      ? await oss.resolveVideoCoverUrl(videoUrl, videoCoverId)
+      : '';
     return {
       ...log,
       images: images.filter(Boolean),
-      videoUrl: videoUrl || ''
+      videoUrl: videoUrl || '',
+      videoCoverUrl: videoCoverUrl || ''
     };
   }));
 }
@@ -66,10 +74,30 @@ async function getStoreById(storeId) {
 
 async function isMerchantUser(openid, storeId) {
   if (!openid || !storeId) return false;
-  const data = await db.findMany('users', { openid }, { limit: 20 });
-  return (data || []).some((doc) => (
-    normalizeIsMerchant(doc.isMerchant) && doc.store_id === storeId
-  ));
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  if (!user) return false;
+  if (userFields.resolveMerchantStoreId(user) === storeId
+    && userFields.isMerchantApprovedFromDoc(user)) {
+    return true;
+  }
+  const openids = identity.collectOpenids(user);
+  const owned = await db.findMany('stores', {
+    store_id: storeId,
+    ownerOpenid: { $in: openids }
+  }, { limit: 1 });
+  if (owned.length) return true;
+  const staff = await db.findMany('stores', {
+    store_id: storeId,
+    staffOpenids: { $in: openids }
+  }, { limit: 1 });
+  return staff.length > 0;
+}
+
+async function isOrderUser(order, openid) {
+  if (!order || !openid) return false;
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  const openids = user ? identity.collectOpenids(user) : [openid];
+  return openids.includes(order.userOpenid);
 }
 
 async function canManageStore(storeId, openid) {
@@ -88,7 +116,11 @@ async function canManageStore(storeId, openid) {
     return true;
   }
 
-  const ownedStores = await db.findMany('stores', { ownerOpenid: openid, store_id: storeId }, { limit: 1 });
+  const openids = identity.collectOpenids(await identity.findPrimaryUserByOpenid(openid) || openid);
+  const ownedStores = await db.findMany('stores', {
+    ownerOpenid: { $in: openids },
+    store_id: storeId
+  }, { limit: 1 });
   return ownedStores.length > 0;
 }
 
@@ -143,12 +175,17 @@ async function saveDailyLog(event, openid) {
   const images = sanitizeMediaList(rawImages);
   const rawVideo = payload.video || '';
   const video = sanitizeMediaField(rawVideo);
+  const rawVideoCover = payload.videoCover || '';
+  const videoCover = sanitizeMediaField(rawVideoCover);
 
   if (rawImages.length && !images.length) {
     return { success: false, errMsg: '图片未上传成功，请重新打卡' };
   }
   if (rawVideo && !video) {
     return { success: false, errMsg: '视频未上传成功，请重新打卡' };
+  }
+  if (rawVideoCover && !videoCover) {
+    return { success: false, errMsg: '视频封面未上传成功，请重新打卡' };
   }
 
   const now = Date.now();
@@ -164,6 +201,7 @@ async function saveDailyLog(event, openid) {
     description: payload.description || '',
     images,
     video,
+    videoCover,
     notifyOwner,
     isAbnormal: notifyOwner,
     time: payload.time || new Date(now).toLocaleString('zh-CN'),
@@ -173,9 +211,10 @@ async function saveDailyLog(event, openid) {
   await db.ensureCollections([DAILY_LOGS_COLLECTION]);
   await db.insertOne('daily_logs', logData);
 
+  const [savedLog] = await enrichLogsMedia([logData]);
   return {
     success: true,
-    log: formatLog(logData)
+    log: savedLog || formatLog(logData)
   };
 }
 
@@ -192,7 +231,7 @@ async function listDailyLogsByOrders(event, openid) {
     const orderDocs = await db.findMany('orders', { order_id: { $in: chunk } });
     for (const order of orderDocs || []) {
       const isMerchant = await canManageOrder(order, openid);
-      const isUser = order.userOpenid === openid;
+      const isUser = await isOrderUser(order, openid);
       if (isMerchant || isUser) {
         authorizedOrderIds.push(order.order_id);
       }
@@ -225,7 +264,7 @@ async function listDailyLogs(event, openid) {
   if (!order) return { success: false, errMsg: '订单不存在' };
 
   const isMerchant = await canManageOrder(order, openid);
-  const isUser = order.userOpenid === openid;
+  const isUser = await isOrderUser(order, openid);
   if (!isMerchant && !isUser) {
     return { success: false, errMsg: '无权查看打卡记录' };
   }

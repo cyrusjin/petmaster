@@ -4,7 +4,7 @@
       <text class="card-title" style="border:none;padding:0;margin:0;">订单详情</text>
       <view class="status-badge status-{{order.status}}"><text>{{statusLabel}}</text></view>
     </view>
-    <text class="copy-hint">点击蓝色内容可复制</text>
+    <text class="copy-hint">点击内容可复制</text>
     <copyable-detail-row wx:if="{{order.storeName}}" label="寄养店铺" value="{{order.storeName}}" />
     <copyable-detail-row label="订单编号" value="{{order.displayNo}}" />
     <copyable-detail-row wx:if="{{order.createTimeText}}" label="下单时间" value="{{order.createTimeText}}" />

@@ -1,8 +1,6 @@
-const { isMerchantApproved, isMerchantPending, isMerchantRejected } = require('./role');
-const { isMerchantDemoMode } = require('./merchantDemo');
-
-const MERCHANT_APPLY_HOME = '/pages/merchant/tab-daily/tab-daily';
-const MERCHANT_HOME = '/pages/merchant/tab-daily/tab-daily';
+/**
+ * 宠主端壳：仅用户 Tab，不再切换商家端（商家功能在独立小程序 PetMasterBusiness）
+ */
 
 const USER_TAB_ROUTES = [
   'pages/index/index',
@@ -10,11 +8,9 @@ const USER_TAB_ROUTES = [
   'pages/daily/daily'
 ];
 
-const MERCHANT_TAB_ROUTES = [
-  'pages/merchant/tab-daily/tab-daily',
-  'pages/merchant/tab-statistics/tab-statistics',
-  'pages/merchant/tab-store/tab-store'
-];
+const MERCHANT_TAB_ROUTES = [];
+const MERCHANT_APPLY_HOME = '/pages/index/index';
+const MERCHANT_HOME = '/pages/index/index';
 
 function getCurrentRoute() {
   const pages = getCurrentPages();
@@ -22,49 +18,20 @@ function getCurrentRoute() {
   return current ? current.route : '';
 }
 
-function isMerchantTabRoute(route) {
-  return MERCHANT_TAB_ROUTES.includes(route);
-}
-
-function isStoreVisitEntry() {
-  try {
-    const app = getApp();
-    if (app && typeof app.isUserClientMode === 'function') {
-      return app.isUserClientMode();
-    }
-    return !!(app && app._storeVisitEntry);
-  } catch (err) {
-    return false;
-  }
+function isMerchantTabRoute() {
+  return false;
 }
 
 function hasMerchantBackendAccess() {
-  try {
-    const app = getApp();
-    if (app.isMerchantApproved && app.isMerchantApproved()) return true;
-    return isMerchantApproved(app.globalData && app.globalData.userInfo);
-  } catch (err) {
-    return false;
-  }
+  return false;
 }
 
 function canUseMerchantShell() {
-  try {
-    const app = getApp();
-    if (isStoreVisitEntry()) return false;
-    const user = app.globalData && app.globalData.userInfo;
-    if (hasMerchantBackendAccess()) return true;
-    if (isMerchantDemoMode(user)) return true;
-    if (isMerchantPending(user) || isMerchantRejected(user)) return true;
-    return false;
-  } catch (err) {
-    return false;
-  }
+  return false;
 }
 
-/** @deprecated 用 hasMerchantBackendAccess 判断是否可进商家端 */
 function hasMerchantStore() {
-  return hasMerchantBackendAccess();
+  return false;
 }
 
 function getMerchantLandingUrl() {
@@ -72,47 +39,15 @@ function getMerchantLandingUrl() {
 }
 
 function applyRoleShell() {
-  const route = getCurrentRoute();
-
-  if (isStoreVisitEntry()) {
+  // 宠主端使用 custom-tab-bar；须隐藏原生 tabBar，否则会与自定义栏叠成双层
+  try {
     wx.hideTabBar({ animation: false }).catch(() => {});
-    if (isMerchantTabRoute(route) || route === 'pages/merchant/apply/apply') {
-      wx.switchTab({ url: '/pages/index/index' });
-    }
-    return;
-  }
-
-  wx.hideTabBar({ animation: false }).catch(() => {});
-  const landing = getMerchantLandingUrl();
-  const targetRoute = landing.replace(/^\//, '');
-
-  if (route === targetRoute) return;
-
-  if (USER_TAB_ROUTES.includes(route) || route === 'pages/index/index') {
-    wx.reLaunch({ url: landing });
-    return;
-  }
-
-  if (hasMerchantBackendAccess() && route === 'pages/merchant/apply/apply') {
-    wx.reLaunch({ url: landing });
-    return;
-  }
-
-  if (!hasMerchantBackendAccess() && isMerchantTabRoute(route)) {
-    if (!canUseMerchantShell()) {
-      wx.reLaunch({ url: landing });
-    }
+  } catch (err) {
+    // ignore
   }
 }
 
 function guardUserTabPage() {
-  if (!isStoreVisitEntry()) {
-    const route = getCurrentRoute();
-    if (USER_TAB_ROUTES.includes(route)) {
-      applyRoleShell();
-      return true;
-    }
-  }
   return false;
 }
 
