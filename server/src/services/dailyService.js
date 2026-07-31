@@ -6,18 +6,66 @@ const userFields = require('./userFields');
 const notifyService = require('./notifyService');
 
 const DAILY_LOGS_COLLECTION = 'daily_logs';
+const DAILY_LOG_COMMENTS_COLLECTION = 'daily_log_comments';
+const SCHEDULE_POLL_MS = 30 * 1000;
+const MIN_SCHEDULE_AHEAD_MS = 60 * 1000;
+const MAX_COMMENT_LEN = 200;
 
-function normalizeIsMerchant(value) {
-  if (value === true || value === 1) return true;
-  if (typeof value === 'string') return value.toLowerCase() === 'true';
-  return false;
-}
+let scheduleTimer = null;
+let scheduleRunning = false;
 
 function buildLogId() {
   return `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function buildCommentId() {
+  return `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function formatCommentTime(ts) {
+  const n = Number(ts) || 0;
+  if (!n) return '';
+  try {
+    return new Date(n).toLocaleString('zh-CN', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (err) {
+    return '';
+  }
+}
+
+function formatComment(doc) {
+  if (!doc) return null;
+  const role = doc.authorRole === 'merchant' ? 'merchant' : 'user';
+  return {
+    id: doc.comment_id,
+    comment_id: doc.comment_id,
+    logId: doc.log_id,
+    log_id: doc.log_id,
+    orderId: doc.order_id,
+    order_id: doc.order_id,
+    authorRole: role,
+    authorName: doc.authorName || (role === 'merchant' ? '商家' : '宠主'),
+    content: doc.content || '',
+    replyToCommentId: doc.replyToCommentId || '',
+    replyToAuthorName: doc.replyToAuthorName || '',
+    createTime: doc.createTime || 0,
+    time: formatCommentTime(doc.createTime)
+  };
+}
+
+function isScheduledDoc(doc) {
+  if (!doc) return false;
+  if (doc.status === 'scheduled') return true;
+  return !!doc.isScheduled && Number(doc.scheduledAt) > Date.now();
+}
+
 function formatLog(doc) {
+  const scheduledAt = Number(doc.scheduledAt) || 0;
+  const status = doc.status || (isScheduledDoc(doc) ? 'scheduled' : 'published');
   return {
     id: doc.log_id,
     log_id: doc.log_id,
@@ -29,10 +77,14 @@ function formatLog(doc) {
     images: Array.isArray(doc.images) ? doc.images : [],
     video: doc.video || '',
     videoCover: doc.videoCover || '',
-    notifyOwner: !!(doc.notifyOwner || doc.isAbnormal),
-    isAbnormal: !!(doc.notifyOwner || doc.isAbnormal),
+    notifyOwner: !!doc.notifyOwner,
+    isAbnormal: !!doc.isAbnormal,
     time: doc.time || '',
-    createTime: doc.createTime
+    createTime: doc.createTime,
+    status,
+    isScheduled: status === 'scheduled',
+    scheduledAt,
+    publishedAt: Number(doc.publishedAt) || 0
   };
 }
 
@@ -42,6 +94,12 @@ function sanitizeMediaList(list) {
 
 function sanitizeMediaField(value) {
   return oss.isStoredMedia(value) ? value : '';
+}
+
+function filterLogsForViewer(logs, viewerIsMerchant) {
+  if (viewerIsMerchant) return logs || [];
+  // 宠主端不提前看到未发布的预约打卡
+  return (logs || []).filter((log) => log.status !== 'scheduled' && !log.isScheduled);
 }
 
 async function enrichLogsMedia(logs) {
@@ -126,8 +184,159 @@ async function canManageStore(storeId, openid) {
 }
 
 async function initDailyDatabase() {
-  await db.ensureCollections([DAILY_LOGS_COLLECTION]);
+  await db.ensureCollections([DAILY_LOGS_COLLECTION, DAILY_LOG_COMMENTS_COLLECTION]);
+  try {
+    await db.collection(DAILY_LOGS_COLLECTION).createIndex(
+      { status: 1, scheduledAt: 1 },
+      { name: 'status_scheduledAt', background: true }
+    );
+  } catch (err) {
+    console.warn('[daily] createIndex status_scheduledAt failed', (err && err.message) || err);
+  }
+  try {
+    await db.collection(DAILY_LOG_COMMENTS_COLLECTION).createIndex(
+      { log_id: 1, createTime: 1 },
+      { name: 'log_id_createTime', background: true }
+    );
+  } catch (err) {
+    console.warn('[daily] createIndex log_id_createTime failed', (err && err.message) || err);
+  }
   return { success: true, collection: DAILY_LOGS_COLLECTION };
+}
+
+async function getLogAccessContext(logId, openid) {
+  if (!logId) return { error: '缺少打卡记录' };
+  const log = await db.findOne(DAILY_LOGS_COLLECTION, { log_id: logId });
+  if (!log) return { error: '打卡记录不存在' };
+  const order = await getOrderById(log.order_id);
+  if (!order) return { error: '订单不存在' };
+  const isMerchant = await canManageOrder(order, openid);
+  const isUser = await isOrderUser(order, openid);
+  if (!isMerchant && !isUser) {
+    return { error: '无权操作该打卡' };
+  }
+  return { log, order, isMerchant, isUser };
+}
+
+async function resolveCommentAuthor(openid, isMerchant, order) {
+  if (isMerchant) {
+    const storeId = (order && order.store_id) || '';
+    const store = storeId ? await getStoreById(storeId) : null;
+    const name = (store && store.name && String(store.name).trim()) || '商家';
+    return { authorRole: 'merchant', authorName: name };
+  }
+  const user = await identity.findPrimaryUserByOpenid(openid);
+  const nick = user && user.nickName ? String(user.nickName).trim() : '';
+  const contact = order && order.contactName ? String(order.contactName).trim() : '';
+  return {
+    authorRole: 'user',
+    authorName: nick || contact || '宠主'
+  };
+}
+
+async function attachCommentsToLogs(logs) {
+  const list = logs || [];
+  const logIds = [...new Set(list.map((item) => item.id || item.log_id).filter(Boolean))];
+  if (!logIds.length) {
+    return list.map((item) => ({ ...item, comments: Array.isArray(item.comments) ? item.comments : [] }));
+  }
+
+  const docs = [];
+  const chunkSize = 50;
+  for (let i = 0; i < logIds.length; i += chunkSize) {
+    const chunk = logIds.slice(i, i + chunkSize);
+    const rows = await db.findMany(
+      DAILY_LOG_COMMENTS_COLLECTION,
+      { log_id: { $in: chunk } },
+      { sort: { createTime: 1 }, limit: 2000 }
+    );
+    docs.push(...(rows || []));
+  }
+
+  const byLog = new Map();
+  docs.forEach((doc) => {
+    const id = doc.log_id;
+    if (!id) return;
+    if (!byLog.has(id)) byLog.set(id, []);
+    const formatted = formatComment(doc);
+    if (formatted) byLog.get(id).push(formatted);
+  });
+
+  return list.map((item) => {
+    const id = item.id || item.log_id;
+    return {
+      ...item,
+      comments: byLog.get(id) || []
+    };
+  });
+}
+
+async function addDailyLogComment(event, openid) {
+  if (!openid) return { success: false, errMsg: '无法获取用户身份' };
+
+  const logId = event.logId || event.log_id;
+  const content = String(event.content || '').trim();
+  if (!logId) return { success: false, errMsg: '缺少打卡记录' };
+  if (!content) return { success: false, errMsg: '请输入回复内容' };
+  if (content.length > MAX_COMMENT_LEN) {
+    return { success: false, errMsg: `回复不能超过${MAX_COMMENT_LEN}字` };
+  }
+
+  const ctx = await getLogAccessContext(logId, openid);
+  if (ctx.error) return { success: false, errMsg: ctx.error };
+  const { log, order, isMerchant } = ctx;
+
+  if (isScheduledDoc(log) && log.status !== 'published') {
+    return { success: false, errMsg: '定时打卡发送前暂不可评论' };
+  }
+
+  let replyToCommentId = String(event.replyToCommentId || event.reply_to_comment_id || '').trim();
+  let replyToAuthorName = '';
+  if (replyToCommentId) {
+    const parent = await db.findOne(DAILY_LOG_COMMENTS_COLLECTION, {
+      comment_id: replyToCommentId,
+      log_id: logId
+    });
+    if (!parent) return { success: false, errMsg: '回复的评论不存在' };
+    replyToAuthorName = parent.authorName || '';
+  }
+
+  const author = await resolveCommentAuthor(openid, isMerchant, order);
+  const now = Date.now();
+  const doc = {
+    comment_id: buildCommentId(),
+    log_id: logId,
+    order_id: log.order_id,
+    store_id: log.store_id || order.store_id || '',
+    authorOpenid: openid,
+    authorRole: author.authorRole,
+    authorName: author.authorName,
+    content,
+    replyToCommentId: replyToCommentId || '',
+    replyToAuthorName,
+    createTime: now
+  };
+  await db.insertOne(DAILY_LOG_COMMENTS_COLLECTION, doc);
+  return { success: true, comment: formatComment(doc) };
+}
+
+async function listDailyLogComments(event, openid) {
+  if (!openid) return { success: false, errMsg: '无法获取用户身份' };
+  const logId = event.logId || event.log_id;
+  if (!logId) return { success: false, errMsg: '缺少打卡记录' };
+
+  const ctx = await getLogAccessContext(logId, openid);
+  if (ctx.error) return { success: false, errMsg: ctx.error };
+
+  const rows = await db.findMany(
+    DAILY_LOG_COMMENTS_COLLECTION,
+    { log_id: logId },
+    { sort: { createTime: 1 }, limit: 200 }
+  );
+  return {
+    success: true,
+    comments: (rows || []).map(formatComment).filter(Boolean)
+  };
 }
 
 async function listMerchantDailyLogs(event, openid) {
@@ -141,12 +350,37 @@ async function listMerchantDailyLogs(event, openid) {
     return { success: false, errMsg: '无权查看打卡记录' };
   }
 
-  const result = await db.findMany('daily_logs', { store_id: storeId }, { limit: 200 });
+  const result = await db.findMany('daily_logs', { store_id: storeId }, {
+    sort: { createTime: -1 },
+    limit: 500
+  });
   const logs = (result || [])
     .map(formatLog)
     .sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
 
-  return { success: true, logs: await enrichLogsMedia(logs) };
+  return { success: true, logs: await attachCommentsToLogs(await enrichLogsMedia(logs)) };
+}
+
+function resolveScheduleIntent(payload, options = {}) {
+  const scheduledAt = Number(payload.scheduledAt) || 0;
+  const wantsSchedule = !!(
+    payload.isScheduled
+    || payload.status === 'scheduled'
+    || scheduledAt > 0
+  );
+  if (!wantsSchedule) {
+    return { isScheduled: false, scheduledAt: 0 };
+  }
+  if (!Number.isFinite(scheduledAt)) {
+    return { error: '请选择完整的发送时间' };
+  }
+  const minAhead = options.minAheadMs != null ? options.minAheadMs : MIN_SCHEDULE_AHEAD_MS;
+  if (scheduledAt <= Date.now() + minAhead) {
+    return {
+      error: minAhead > 0 ? '请选择至少 1 分钟后的发送时间' : '发送时间必须晚于当前时间'
+    };
+  }
+  return { isScheduled: true, scheduledAt };
 }
 
 async function saveDailyLog(event, openid) {
@@ -159,6 +393,11 @@ async function saveDailyLog(event, openid) {
   const checks = Array.isArray(payload.checks) ? payload.checks.filter(Boolean) : [];
   if (!checks.length) {
     return { success: false, errMsg: '请至少选择一项打卡项目' };
+  }
+
+  const schedule = resolveScheduleIntent(payload);
+  if (schedule.error) {
+    return { success: false, errMsg: schedule.error };
   }
 
   const order = await getOrderById(orderId);
@@ -190,7 +429,14 @@ async function saveDailyLog(event, openid) {
   }
 
   const now = Date.now();
-  const notifyOwner = !!(payload.notifyOwner || payload.isAbnormal);
+  const isScheduled = !!schedule.isScheduled;
+  const scheduledAt = isScheduled ? schedule.scheduledAt : 0;
+  // notifyOwner：是否推送宠主；isAbnormal：业务异常标记。二者不可混用。
+  const notifyOwner = payload.notifyOwner !== false;
+  const isAbnormal = !!(payload.isAbnormal);
+  const displayTime = payload.time
+    || new Date(isScheduled ? scheduledAt : now).toLocaleString('zh-CN');
+
   const logData = {
     log_id: buildLogId(),
     order_id: orderId,
@@ -204,19 +450,27 @@ async function saveDailyLog(event, openid) {
     video,
     videoCover,
     notifyOwner,
-    isAbnormal: notifyOwner,
-    time: payload.time || new Date(now).toLocaleString('zh-CN'),
-    createTime: now
+    isAbnormal,
+    time: displayTime,
+    createTime: now,
+    status: isScheduled ? 'scheduled' : 'published',
+    isScheduled,
+    scheduledAt,
+    publishedAt: isScheduled ? 0 : now
   };
 
   await db.ensureCollections([DAILY_LOGS_COLLECTION]);
   await db.insertOne('daily_logs', logData);
 
   const [savedLog] = await enrichLogsMedia([logData]);
-  notifyService.notifyUserDailyCheck(order, savedLog || formatLog(logData)).catch(() => {});
+  if (!isScheduled && notifyOwner) {
+    notifyService.notifyUserDailyCheck(order, savedLog || formatLog(logData)).catch(() => {});
+  }
+
   return {
     success: true,
-    log: savedLog || formatLog(logData)
+    log: savedLog || formatLog(logData),
+    scheduled: isScheduled
   };
 }
 
@@ -227,6 +481,7 @@ async function listDailyLogsByOrders(event, openid) {
   if (!orderIds.length) return { success: true, logs: [] };
 
   const authorizedOrderIds = [];
+  let viewerIsMerchant = false;
   const chunkSize = 20;
   for (let i = 0; i < orderIds.length; i += chunkSize) {
     const chunk = orderIds.slice(i, i + chunkSize);
@@ -234,6 +489,7 @@ async function listDailyLogsByOrders(event, openid) {
     for (const order of orderDocs || []) {
       const isMerchant = await canManageOrder(order, openid);
       const isUser = await isOrderUser(order, openid);
+      if (isMerchant) viewerIsMerchant = true;
       if (isMerchant || isUser) {
         authorizedOrderIds.push(order.order_id);
       }
@@ -249,11 +505,12 @@ async function listDailyLogsByOrders(event, openid) {
     allDocs.push(...(result || []));
   }
 
-  const logs = allDocs
-    .map(formatLog)
-    .sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
+  const logs = filterLogsForViewer(
+    allDocs.map(formatLog).sort((a, b) => (b.createTime || 0) - (a.createTime || 0)),
+    viewerIsMerchant
+  );
 
-  return { success: true, logs: await enrichLogsMedia(logs) };
+  return { success: true, logs: await attachCommentsToLogs(await enrichLogsMedia(logs)) };
 }
 
 async function listDailyLogs(event, openid) {
@@ -275,8 +532,226 @@ async function listDailyLogs(event, openid) {
     sort: { createTime: -1 },
     limit: 100
   });
-  const logs = (result || []).map(formatLog);
-  return { success: true, logs: await enrichLogsMedia(logs) };
+  const logs = filterLogsForViewer((result || []).map(formatLog), isMerchant);
+  return { success: true, logs: await attachCommentsToLogs(await enrichLogsMedia(logs)) };
+}
+
+async function publishDueScheduledLogs() {
+  if (scheduleRunning) return { processed: 0, skipped: true };
+  scheduleRunning = true;
+  try {
+    const now = Date.now();
+    const dueDocs = await db.findMany('daily_logs', {
+      status: 'scheduled',
+      scheduledAt: { $lte: now }
+    }, {
+      sort: { scheduledAt: 1 },
+      limit: 50
+    });
+
+    let processed = 0;
+    for (const doc of dueDocs || []) {
+      const logId = doc.log_id;
+      if (!logId) continue;
+
+      const updateResult = await db.collection(DAILY_LOGS_COLLECTION).updateOne(
+        { log_id: logId, status: 'scheduled' },
+        {
+          $set: {
+            status: 'published',
+            isScheduled: false,
+            publishedAt: now,
+            notifyOwner: true
+          }
+        }
+      );
+      if (!updateResult || !updateResult.modifiedCount) continue;
+
+      const updated = await db.findOne(DAILY_LOGS_COLLECTION, { log_id: logId });
+      if (!updated) continue;
+
+      const order = await getOrderById(updated.order_id);
+      if (!order) {
+        console.warn('[daily-schedule] order missing for log', logId);
+        processed += 1;
+        continue;
+      }
+
+      const [enriched] = await enrichLogsMedia([updated]);
+      try {
+        await notifyService.notifyUserDailyCheck(order, enriched || formatLog(updated));
+      } catch (err) {
+        console.error('[daily-schedule] notify failed', logId, (err && err.message) || err);
+      }
+      processed += 1;
+    }
+
+    if (processed > 0) {
+      console.log(`[daily-schedule] published ${processed} scheduled log(s)`);
+    }
+    return { processed };
+  } finally {
+    scheduleRunning = false;
+  }
+}
+
+function startDailyScheduleWorker() {
+  if (scheduleTimer) return;
+  const tick = () => {
+    publishDueScheduledLogs().catch((err) => {
+      console.error('[daily-schedule] tick failed', (err && err.message) || err);
+    });
+  };
+  scheduleTimer = setInterval(tick, SCHEDULE_POLL_MS);
+  if (typeof scheduleTimer.unref === 'function') {
+    scheduleTimer.unref();
+  }
+  setTimeout(tick, 5000);
+  console.log(`[daily-schedule] worker started, interval=${SCHEDULE_POLL_MS}ms`);
+}
+
+async function deleteDailyLog(event, openid) {
+  if (!openid) return { success: false, errMsg: '无法获取用户身份' };
+
+  const logId = event.logId || event.log_id || (event.log && (event.log.id || event.log.log_id));
+  if (!logId) return { success: false, errMsg: '缺少打卡记录 ID' };
+
+  const docs = await db.findMany(DAILY_LOGS_COLLECTION, { log_id: logId }, { limit: 1 });
+  const doc = docs && docs[0];
+  if (!doc) return { success: false, errMsg: '打卡记录不存在' };
+
+  if (doc.status !== 'scheduled' && !(doc.isScheduled && doc.status !== 'published')) {
+    return { success: false, errMsg: '仅未发送的定时打卡可删除' };
+  }
+
+  const order = await getOrderById(doc.order_id);
+  if (!order) return { success: false, errMsg: '订单不存在' };
+
+  const isMerchant = await canManageOrder(order, openid);
+  if (!isMerchant) {
+    return { success: false, errMsg: '无权删除该打卡记录' };
+  }
+
+  const result = await db.collection(DAILY_LOGS_COLLECTION).deleteOne({
+    log_id: logId,
+    $or: [
+      { status: 'scheduled' },
+      { isScheduled: true, status: { $ne: 'published' } }
+    ]
+  });
+  if (!result || !result.deletedCount) {
+    return { success: false, errMsg: '删除失败，记录可能已发送' };
+  }
+
+  return { success: true, logId };
+}
+
+async function updateDailyLog(event, openid) {
+  if (!openid) return { success: false, errMsg: '无法获取用户身份' };
+
+  const payload = event.log || {};
+  const logId = event.logId || event.log_id || payload.id || payload.log_id;
+  if (!logId) return { success: false, errMsg: '缺少打卡记录 ID' };
+
+  const docs = await db.findMany(DAILY_LOGS_COLLECTION, { log_id: logId }, { limit: 1 });
+  const doc = docs && docs[0];
+  if (!doc) return { success: false, errMsg: '打卡记录不存在' };
+
+  if (doc.status !== 'scheduled' && !(doc.isScheduled && doc.status !== 'published')) {
+    return { success: false, errMsg: '仅未发送的定时打卡可修改' };
+  }
+
+  const order = await getOrderById(doc.order_id);
+  if (!order) return { success: false, errMsg: '订单不存在' };
+
+  const isMerchant = await canManageOrder(order, openid);
+  if (!isMerchant) {
+    return { success: false, errMsg: '无权修改该打卡记录' };
+  }
+  if (order.status !== 'boarding') {
+    return { success: false, errMsg: '仅寄养中订单可修改定时打卡' };
+  }
+
+  const checks = Array.isArray(payload.checks) ? payload.checks.filter(Boolean) : [];
+  if (!checks.length) {
+    return { success: false, errMsg: '请至少选择一项打卡项目' };
+  }
+
+  const schedule = resolveScheduleIntent({
+    ...payload,
+    isScheduled: true,
+    status: 'scheduled',
+    scheduledAt: payload.scheduledAt || doc.scheduledAt
+  }, {
+    // 修改时允许保留原定时点（只要还没到）
+    minAheadMs: Number(payload.scheduledAt) === Number(doc.scheduledAt) ? 0 : MIN_SCHEDULE_AHEAD_MS
+  });
+  if (schedule.error) {
+    return { success: false, errMsg: schedule.error };
+  }
+
+  const rawImages = Array.isArray(payload.images) ? payload.images : (doc.images || []);
+  const images = sanitizeMediaList(rawImages);
+  const rawVideo = payload.video != null ? payload.video : (doc.video || '');
+  const video = sanitizeMediaField(rawVideo);
+  const rawVideoCover = payload.videoCover != null ? payload.videoCover : (doc.videoCover || '');
+  const videoCover = sanitizeMediaField(rawVideoCover);
+
+  if (rawImages.length && !images.length) {
+    return { success: false, errMsg: '图片未上传成功，请重新选择' };
+  }
+  if (rawVideo && !video) {
+    return { success: false, errMsg: '视频未上传成功，请重新选择' };
+  }
+  if (rawVideoCover && !videoCover) {
+    return { success: false, errMsg: '视频封面未上传成功，请重新选择' };
+  }
+  if (!images.length && !video) {
+    return { success: false, errMsg: '请上传照片或视频' };
+  }
+
+  const now = Date.now();
+  const scheduledAt = schedule.scheduledAt;
+  const displayTime = payload.time
+    || new Date(scheduledAt).toLocaleString('zh-CN');
+
+  const patch = {
+    checks,
+    description: payload.description != null ? payload.description : (doc.description || ''),
+    images,
+    video,
+    videoCover,
+    notifyOwner: true,
+    isAbnormal: false,
+    time: displayTime,
+    status: 'scheduled',
+    isScheduled: true,
+    scheduledAt,
+    publishedAt: 0,
+    updateTime: now
+  };
+
+  const result = await db.collection(DAILY_LOGS_COLLECTION).updateOne(
+    {
+      log_id: logId,
+      $or: [
+        { status: 'scheduled' },
+        { isScheduled: true, status: { $ne: 'published' } }
+      ]
+    },
+    { $set: patch }
+  );
+  if (!result || !result.matchedCount) {
+    return { success: false, errMsg: '修改失败，记录可能已发送' };
+  }
+
+  const updated = await db.findOne(DAILY_LOGS_COLLECTION, { log_id: logId });
+  const [savedLog] = await enrichLogsMedia([updated || { ...doc, ...patch, log_id: logId }]);
+  return {
+    success: true,
+    log: savedLog || formatLog(updated || { ...doc, ...patch, log_id: logId }),
+    scheduled: true
+  };
 }
 
 async function handle(event, openid) {
@@ -285,15 +760,28 @@ async function handle(event, openid) {
       return initDailyDatabase();
     case 'saveDailyLog':
       return saveDailyLog(event, openid);
+    case 'updateDailyLog':
+      return updateDailyLog(event, openid);
+    case 'deleteDailyLog':
+      return deleteDailyLog(event, openid);
     case 'listDailyLogs':
       return listDailyLogs(event, openid);
     case 'listDailyLogsByOrders':
       return listDailyLogsByOrders(event, openid);
     case 'listMerchantDailyLogs':
       return listMerchantDailyLogs(event, openid);
+    case 'addDailyLogComment':
+      return addDailyLogComment(event, openid);
+    case 'listDailyLogComments':
+      return listDailyLogComments(event, openid);
     default:
       return { success: false, errMsg: '未知操作' };
   }
 }
 
-module.exports = { handle };
+module.exports = {
+  handle,
+  startDailyScheduleWorker,
+  publishDueScheduledLogs,
+  initDailyDatabase
+};

@@ -30,6 +30,10 @@ function bindUserStore(storeId) {
   return callUserAuth('bindUserStore', { store_id: storeId });
 }
 
+function registerVisitStoreIntent(storeId) {
+  return callUserAuth('registerVisitStoreIntent', { store_id: storeId });
+}
+
 function setMerchantProfile(storeId) {
   return callUserAuth('setMerchantProfile', { store_id: storeId || '' });
 }
@@ -45,6 +49,7 @@ module.exports = {
   bindPhone,
   dedupeMyUser,
   bindUserStore,
+  registerVisitStoreIntent,
   setMerchantProfile,
   ping
 };

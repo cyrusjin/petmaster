@@ -47,11 +47,10 @@ function parseJsonMap(raw, fallback = {}) {
 
 const defaultTemplateFields = {
   newOrder: {
-    orderNo: 'character_string1',
-    petName: 'thing2',
-    serviceType: 'thing3',
-    reserveTime: 'time4',
-    storeName: 'thing5'
+    customerName: 'thing1',
+    userPhone: 'phone_number11',
+    projectName: 'thing6',
+    serviceTime: 'time4'
   },
   orderStatus: {
     orderNo: 'character_string1',
@@ -60,13 +59,53 @@ const defaultTemplateFields = {
     storeName: 'thing4',
     updateTime: 'time5'
   },
+  orderCancel: {
+    projectName: 'thing12',
+    userPhone: 'phone_number16',
+    cancelTime: 'time5'
+  },
+  merchantApplyApproved: {
+    applicantName: 'thing2',
+    merchantName: 'thing5',
+    applyTime: 'time3'
+  },
+  merchantApplyRejected: {
+    applicantName: 'thing2',
+    applyTime: 'time3',
+    merchantName: 'thing5',
+    rejectReason: 'thing6'
+  },
+  merchantApplyAdmin: {
+    userName: 'thing2',
+    platformName: 'thing1'
+  },
   dailyCheck: {
-    petName: 'thing1',
-    checks: 'thing2',
-    storeName: 'thing3',
-    checkTime: 'time4'
+    storeName: 'thing6',
+    customerName: 'thing1',
+    projectName: 'thing8',
+    checkTime: 'time10'
   }
 };
+
+function parseCsvList(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/** 解析「微信号:服务号openid」映射，如 NYS_Eason:oSslh...,VanlaStory:oXxx */
+function parseWechatIdOaMap(raw) {
+  const map = {};
+  parseCsvList(raw).forEach((entry) => {
+    const idx = entry.indexOf(':');
+    if (idx <= 0) return;
+    const wechatId = entry.slice(0, idx).trim();
+    const oaOpenid = entry.slice(idx + 1).trim();
+    if (wechatId && oaOpenid) map[wechatId] = oaOpenid;
+  });
+  return map;
+}
 
 const config = {
   port: Number(required('PORT', '3000')),
@@ -86,23 +125,68 @@ const config = {
       secret: merchantSecret || userSecret
     }
   },
-  // 服务号（模板消息推送）
+  // 服务号（模板消息推送 / 关注欢迎）
   wxOa: {
     appId: required('WX_OA_APPID', ''),
     secret: required('WX_OA_SECRET', ''),
     token: required('WX_OA_TOKEN', ''),
     aesKey: required('WX_OA_AES_KEY', ''),
     qrcodeUrl: required('WX_OA_QRCODE_URL', ''),
+    adminNotify: {
+      platformName: required('WX_OA_ADMIN_PLATFORM_NAME', '熠森宠物管家'),
+      nicknames: parseCsvList(required('WX_OA_ADMIN_NOTIFY_NICKNAMES', 'Eason_,Freddie')),
+      wechatIds: parseCsvList(required('WX_OA_ADMIN_NOTIFY_WECHAT_IDS', '')),
+      // 小程序 openid（自动查用户表绑定的服务号 openid）
+      mpOpenids: parseCsvList(required('WX_OA_ADMIN_NOTIFY_MP_OPENIDS', '')),
+      oaOpenids: parseCsvList(required('WX_OA_ADMIN_NOTIFY_OA_OPENIDS', '')),
+      // 可选：微信号直接映射服务号 openid，无需用户表字段
+      wechatIdOaMap: parseWechatIdOaMap(required('WX_OA_ADMIN_NOTIFY_MAP', ''))
+    },
+    welcome: {
+      text: required(
+        'WX_OA_WELCOME_TEXT',
+        '欢迎关注熠森宠物管家！我是你的宠物管家助手～点击下方小程序，即可预约托管、查看日常打卡，并及时接收服务通知。'
+      ),
+      // 默认推送商家端小程序
+      mpAppId: required('WX_OA_WELCOME_MP_APPID', '') || merchantAppId || userAppId,
+      mpPath: required('WX_OA_WELCOME_MP_PATH', 'pages/index/index'),
+      mpTitle: required('WX_OA_WELCOME_MP_TITLE', '打开宠物管家'),
+      thumbMediaId: required('WX_OA_WELCOME_THUMB_MEDIA_ID', '')
+    },
     templates: {
       newOrder: required('WX_OA_TEMPLATE_NEW_ORDER', ''),
       orderStatus: required('WX_OA_TEMPLATE_ORDER_STATUS', ''),
+      orderCancel: required('WX_OA_TEMPLATE_ORDER_CANCEL', ''),
+      merchantApplyApproved: required('WX_OA_TEMPLATE_MERCHANT_APPLY_APPROVED', ''),
+      merchantApplyRejected: required('WX_OA_TEMPLATE_MERCHANT_APPLY_REJECTED', ''),
+      merchantApplyAdmin: required('WX_OA_TEMPLATE_MERCHANT_APPLY_ADMIN', ''),
       dailyCheck: required('WX_OA_TEMPLATE_DAILY_CHECK', '')
     },
     templateFields: {
       newOrder: parseJsonMap(required('WX_OA_FIELDS_NEW_ORDER', ''), defaultTemplateFields.newOrder),
       orderStatus: parseJsonMap(required('WX_OA_FIELDS_ORDER_STATUS', ''), defaultTemplateFields.orderStatus),
+      orderCancel: parseJsonMap(required('WX_OA_FIELDS_ORDER_CANCEL', ''), defaultTemplateFields.orderCancel),
+      merchantApplyApproved: parseJsonMap(
+        required('WX_OA_FIELDS_MERCHANT_APPLY_APPROVED', ''),
+        defaultTemplateFields.merchantApplyApproved
+      ),
+      merchantApplyRejected: parseJsonMap(
+        required('WX_OA_FIELDS_MERCHANT_APPLY_REJECTED', ''),
+        defaultTemplateFields.merchantApplyRejected
+      ),
+      merchantApplyAdmin: parseJsonMap(
+        required('WX_OA_FIELDS_MERCHANT_APPLY_ADMIN', ''),
+        defaultTemplateFields.merchantApplyAdmin
+      ),
       dailyCheck: parseJsonMap(required('WX_OA_FIELDS_DAILY_CHECK', ''), defaultTemplateFields.dailyCheck)
     }
+  },
+  // 小程序消息推送（mediaCheckAsync 异步审图结果），两端可共用同一 Token/AES
+  wxMp: {
+    token: required('WX_MP_TOKEN', '') || required('WX_OA_TOKEN', ''),
+    aesKey: required('WX_MP_AES_KEY', ''),
+    // true：上传同步 imgSecCheck 拦截违规图（推荐）；false：仅异步抽检
+    syncImageCheck: String(required('WX_MEDIA_SYNC_CHECK', 'true')).toLowerCase() !== 'false'
   },
   // 腾讯位置服务（接送导航距离）
   tencentMapKey: required('TENCENT_MAP_KEY', ''),

@@ -161,6 +161,22 @@
       </view>
     </view>
 
+    <view class="card" wx:if="{{store.notice || (store.noticePhotos && store.noticePhotos.length)}}">
+      <view class="card-title">寄养须知</view>
+      <text class="boarding-notice-text" wx:if="{{store.notice}}">{{store.notice}}</text>
+      <view class="boarding-notice-photos" wx:if="{{store.noticePhotos && store.noticePhotos.length}}">
+        <view
+          class="boarding-notice-photo-item"
+          wx:for="{{store.noticePhotos}}"
+          wx:key="*this"
+          bindtap="onPreviewNoticePhoto"
+          data-url="{{item}}"
+        >
+          <cached-image custom-class="boarding-notice-photo" src="{{item}}" mode="aspectFill" />
+        </view>
+      </view>
+    </view>
+
     <view class="card">
       <view class="card-title">联系信息</view>
       <view class="form-group">

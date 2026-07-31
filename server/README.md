@@ -25,10 +25,11 @@ npm start
 | POST | `/api/order` | 原 orderService |
 | POST | `/api/pet` | 原 petService |
 | POST | `/api/daily` | 原 dailyService |
-| GET/POST | `/api/wechat/oa` | 服务号消息回调（关注绑定 openids.oa） |
+| GET/POST | `/api/wechat/oa` | 服务号消息回调（关注绑定 + 欢迎文字 + 店铺意向登记） |
 | POST | `/api/upload/sign` | 获取本地上传凭证 |
-| POST | `/api/upload` | 小程序直传文件（multipart，需登录） |
+| POST | `/api/upload` | 小程序直传文件（multipart，需登录；含微信图片内容安全） |
 | GET | `/media/*` | 本地媒体静态访问 |
+| GET/POST | `/api/wechat/mp` | 小程序消息推送（`mediaCheckAsync` 审图结果） |
 
 鉴权：`Authorization: Bearer <token>`
 

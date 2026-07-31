@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>商家入驻审核 · 宠大师 PetMaster</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="admin.css?v=20260729c" />
   <link rel="icon" href="../assets/card/card-pets.png" type="image/png" />
 </head>
 <body class="admin-page">
@@ -52,7 +54,21 @@
     </div>
   </main>
 
-  <script src="admin.js"></script>
+  <div class="contract-modal" id="contract-modal" hidden>
+    <div class="contract-modal-mask" id="contract-modal-mask"></div>
+    <div class="contract-modal-dialog card" role="dialog" aria-modal="true">
+      <div class="contract-modal-header">
+        <div>
+          <h2 id="contract-modal-title">入驻合作协议</h2>
+          <p id="contract-modal-meta"></p>
+        </div>
+        <button class="btn btn-outline btn-sm" id="contract-modal-close" type="button">关闭</button>
+      </div>
+      <pre class="contract-modal-body" id="contract-modal-body"></pre>
+    </div>
+  </div>
+
+  <script src="admin.js?v=20260729c"></script>
   <script>
     if (!PetAdmin.requireAuth()) {
       throw new Error('redirect');
@@ -60,9 +76,50 @@
 
     const contentEl = document.getElementById('content');
     const adminUserEl = document.getElementById('admin-user');
+    const contractModalEl = document.getElementById('contract-modal');
+    const contractModalTitleEl = document.getElementById('contract-modal-title');
+    const contractModalMetaEl = document.getElementById('contract-modal-meta');
+    const contractModalBodyEl = document.getElementById('contract-modal-body');
     let processingId = '';
 
     adminUserEl.textContent = PetAdmin.getUsername();
+
+    function closeContractModal() {
+      contractModalEl.hidden = true;
+      contractModalBodyEl.textContent = '';
+      contractModalMetaEl.textContent = '';
+    }
+
+    document.getElementById('contract-modal-close').addEventListener('click', closeContractModal);
+    document.getElementById('contract-modal-mask').addEventListener('click', closeContractModal);
+
+    async function viewCoopContract(storeId) {
+      if (!storeId || processingId) return;
+      processingId = 'contract:' + storeId;
+      try {
+        const data = await PetAdmin.api('/api/admin/stores/coop-contract?store_id=' + encodeURIComponent(storeId));
+        if (!data.success) throw new Error(data.errMsg || '加载协议失败');
+        const contract = data.contract || {};
+        contractModalTitleEl.textContent = contract.title || '商家入驻平台合作协议';
+        contractModalMetaEl.textContent = [
+          data.storeName ? ('店铺：' + data.storeName) : '',
+          data.coopContractSignTime ? ('签署时间：' + data.coopContractSignTime) : ''
+        ].filter(Boolean).join(' · ');
+        let body = contract.bodyText || '协议正文缺失';
+        if (contract.signed && contract.signTime) {
+          body += '\n\n—— 电子签署记录 ——\n签署时间：'
+            + contract.signTime
+            + '\n签署方式：'
+            + (contract.signMethod === 'electronic' ? '电子确认' : (contract.signMethod || '电子确认'));
+        }
+        contractModalBodyEl.textContent = body;
+        contractModalEl.hidden = false;
+      } catch (err) {
+        alert(err.message || '加载协议失败');
+      } finally {
+        processingId = '';
+      }
+    }
 
     document.getElementById('logout-btn').addEventListener('click', function () {
       PetAdmin.clearSession();
@@ -83,6 +140,16 @@
         const photos = (item.storePhotos || []).map(function (url, index) {
           return '<img src="' + PetAdmin.escapeHtml(url) + '" alt="店铺照片' + (index + 1) + '" data-url="' + PetAdmin.escapeHtml(url) + '" />';
         }).join('');
+        const licenseUrl = String(item.businessLicense || '').trim();
+        const hasLicense = !!(item.hasBusinessLicense || licenseUrl);
+        const licenseHtml = hasLicense && licenseUrl
+          ? (
+            '<div class="apply-license-box">'
+            + '<img class="apply-license-img" src="' + PetAdmin.escapeHtml(licenseUrl) + '" alt="营业执照" data-url="' + PetAdmin.escapeHtml(licenseUrl) + '" />'
+            + '<a class="apply-license-link" href="' + PetAdmin.escapeHtml(licenseUrl) + '" target="_blank" rel="noopener">点击查看大图</a>'
+            + '</div>'
+          )
+          : '<span class="store-action-muted">未上传</span>';
 
         return [
           '<article class="card apply-card" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">',
@@ -94,17 +161,32 @@
           '<div class="apply-row"><dt>负责人</dt><dd>' + PetAdmin.escapeHtml(item.legalName || '--') + '</dd></div>',
           '<div class="apply-row"><dt>联系电话</dt><dd>' + PetAdmin.escapeHtml(item.contactPhone || '--') + '</dd></div>',
           '<div class="apply-row"><dt>营业地址</dt><dd>' + PetAdmin.escapeHtml(item.address || '--') + '</dd></div>',
-          '<div class="apply-row"><dt>申请人</dt><dd>' + PetAdmin.escapeHtml(item.applicantName || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>微信昵称</dt><dd>' + PetAdmin.escapeHtml(item.applicantNickName || item.applicantName || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>微信 openid</dt><dd class="apply-openid">' + PetAdmin.escapeHtml(item.applicantOpenid || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>入驻协议</dt><dd>' + (item.hasCoopContract ? ('已签署' + (item.coopContractSignTime ? ' · ' + PetAdmin.escapeHtml(item.coopContractSignTime) : '')) : '未签署') + '</dd></div>',
           '<div class="apply-row"><dt>申请时间</dt><dd>' + PetAdmin.escapeHtml(item.applyTimeText || '--') + '</dd></div>',
+          '<div class="apply-row"><dt>营业执照</dt><dd>' + licenseHtml + '</dd></div>',
           photos ? '<div class="apply-row"><dt>店铺照片</dt><dd><div class="apply-photos">' + photos + '</div></dd></div>' : '',
           '</dl>',
           '<div class="apply-actions">',
+          item.hasCoopContract
+            ? '<button class="btn btn-outline btn-sm view-contract-btn" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">查看协议</button>'
+            : '',
+          hasLicense && licenseUrl
+            ? '<a class="btn btn-outline btn-sm" href="' + PetAdmin.escapeHtml(licenseUrl) + '" target="_blank" rel="noopener">查看执照</a>'
+            : '',
           '<button class="btn btn-danger btn-sm reject-btn" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">拒绝</button>',
           '<button class="btn btn-primary btn-sm approve-btn" data-id="' + PetAdmin.escapeHtml(item.store_id) + '">同意开通</button>',
           '</div>',
           '</article>'
         ].join('');
       }).join('');
+
+      contentEl.querySelectorAll('.view-contract-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          viewCoopContract(btn.getAttribute('data-id'));
+        });
+      });
 
       contentEl.querySelectorAll('.approve-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -125,7 +207,7 @@
         });
       });
 
-      contentEl.querySelectorAll('.apply-photos img').forEach(function (img) {
+      contentEl.querySelectorAll('.apply-photos img, .apply-license-img').forEach(function (img) {
         img.addEventListener('click', function () {
           window.open(img.getAttribute('data-url'), '_blank');
         });

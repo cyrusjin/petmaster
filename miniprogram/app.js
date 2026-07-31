@@ -618,6 +618,8 @@ App({
     const needsCloudRefresh = store && (
       isCloudFileId(store.logo)
       || (Array.isArray(store.storePhotos) && store.storePhotos.some(isCloudFileId))
+      || (Array.isArray(store.introPhotos) && store.introPhotos.some(isCloudFileId))
+      || (Array.isArray(store.noticePhotos) && store.noticePhotos.some(isCloudFileId))
     );
     const loader = needsCloudRefresh && storeId
       ? this.bindStore(storeId, { force: true, syncUser: false })

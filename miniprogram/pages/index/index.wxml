@@ -138,6 +138,17 @@
           <view class="welcome-info">
             <text class="welcome-name">{{currentStore.name}}</text>
             <text class="welcome-sub">{{currentStore.intro || '欢迎预约宠物寄养'}}</text>
+            <view class="intro-photos-grid" wx:if="{{currentStore.introPhotos && currentStore.introPhotos.length}}">
+              <view
+                class="intro-photo-item"
+                wx:for="{{currentStore.introPhotos}}"
+                wx:key="*this"
+                bindtap="onPreviewIntroPhoto"
+                data-url="{{item}}"
+              >
+                <cached-image custom-class="intro-photo" src="{{item}}" mode="aspectFill" />
+              </view>
+            </view>
             <text class="welcome-meta" wx:if="{{currentStore.hours}}">营业时间：{{currentStore.hours}}</text>
             <text class="welcome-meta" wx:if="{{currentStore.receptionRangeText}}">接待：{{currentStore.receptionRangeText}}</text>
           </view>
@@ -162,14 +173,6 @@
           <text class="store-phone">{{currentStore.contactPhone}}</text>
         </view>
       </view>
-    </view>
-  </view>
-
-  <view class="store-empty-card" wx:else>
-    <cached-image custom-class="welcome-avatar" src="{{userInfo.avatarUrl}}" default-src="/images/default-avatar.png" mode="aspectFill" />
-    <view class="welcome-info">
-      <text class="welcome-name">{{displayNickName}}</text>
-      <text class="welcome-sub">请通过商家分享链接进入店铺</text>
     </view>
   </view>
 </view>

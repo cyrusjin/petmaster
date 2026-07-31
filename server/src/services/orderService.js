@@ -596,10 +596,51 @@ async function updateOrder(event, openid) {
   const updatedOrder = formatOrder({ ...existing, ...patch }, petDoc);
 
   if (patch.status && patch.status !== prevStatus) {
-    notifyService.notifyUserOrderStatus(updatedOrder, prevStatus).catch(() => {});
+    if (patch.status === 'cancelled') {
+      const cancelledBy = (isUser && !isMerchant) ? 'user' : 'merchant';
+      notifyService.notifyOrderCancelled(updatedOrder, { cancelledBy }).catch(() => {});
+    } else {
+      notifyService.notifyUserOrderStatus(updatedOrder, prevStatus).catch(() => {});
+    }
   }
 
   return { success: true, order: updatedOrder };
+}
+
+async function listAdminStoreOrders(query = {}) {
+  const storeId = (query.store_id || '').trim();
+  if (!storeId) return { success: false, errMsg: '缺少店铺 ID' };
+
+  const store = await getStoreById(storeId);
+  if (!store) return { success: false, errMsg: '店铺不存在' };
+
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 200);
+  const data = await db.findMany('orders', { store_id: storeId }, { limit, sort: { createTime: -1 } });
+  const petMap = await fetchPetsMap((data || []).map((item) => item.petId));
+  const orders = (data || []).map((doc) => {
+    const order = formatOrder(doc, petMap[doc.petId]);
+    if (!order) return null;
+    let createTimeText = '--';
+    if (order.createTime) {
+      try {
+        createTimeText = new Date(order.createTime).toLocaleString('zh-CN');
+      } catch (_) {
+        createTimeText = '--';
+      }
+    }
+    return {
+      ...order,
+      createTimeText
+    };
+  }).filter(Boolean);
+
+  return {
+    success: true,
+    store_id: storeId,
+    storeName: store.name || '',
+    orders,
+    total: orders.length
+  };
 }
 
 async function handle(event, openid) {
@@ -617,4 +658,4 @@ async function handle(event, openid) {
   }
 }
 
-module.exports = { handle, canManageOrder, formatOrder };
+module.exports = { handle, canManageOrder, formatOrder, listAdminStoreOrders };

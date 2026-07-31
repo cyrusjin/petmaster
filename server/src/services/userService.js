@@ -25,6 +25,7 @@ function formatUser(doc) {
     _id: String(doc._id),
     openid: doc.openid,
     nickName: doc.nickName || '',
+    wechatId: doc.wechatId || '',
     avatarUrl: doc.avatarUrl || '',
     phone: doc.phone || '',
     realName: doc.realName || '',
@@ -180,7 +181,7 @@ async function initDatabase() {
   return { success: true, collections: results };
 }
 
-async function getUserInfo(openid) {
+async function getUserInfo(openid, req) {
   if (!openid) {
     return { success: false, errMsg: '无法获取用户身份' };
   }
@@ -194,6 +195,29 @@ async function getUserInfo(openid) {
     doc = records[0];
   } else {
     doc = await getOrCreateUser(openid);
+  }
+
+  // 关注服务号后可能先写入待绑表：拉用户时补挂 openids.oa，便于前端隐藏关注 banner
+  if (doc) {
+    try {
+      const oaBindService = require('./oaBindService');
+      const unionid = (req && req.auth && req.auth.unionid) || doc.unionid || '';
+      if (unionid) {
+        doc = await oaBindService.attachPendingOaByUnionid(doc, unionid) || doc;
+      }
+    } catch (err) {
+      console.warn('[userService] attachPendingOaByUnionid failed', err.message || err);
+    }
+  }
+
+  if (req && req.client === 'user' && doc) {
+    try {
+      const visitStoreIntentService = require('./visitStoreIntentService');
+      const consumed = await visitStoreIntentService.consumeIntentForUser(doc);
+      if (consumed.consumed) doc = consumed.user;
+    } catch (err) {
+      console.warn('[userService] consumeIntentForUser failed', err.message || err);
+    }
   }
 
   return {
@@ -217,6 +241,9 @@ async function syncProfile(event, openid) {
   const storeFields = formatUserStoreFields(doc);
   const profileData = {
     nickName: profile.nickName || doc.nickName || '',
+    wechatId: profile.wechatId !== undefined
+      ? String(profile.wechatId || '').trim()
+      : (doc.wechatId || ''),
     avatarUrl: profile.avatarUrl || doc.avatarUrl || '',
     phone: profile.phone || doc.phone || '',
     realName: profile.realName || doc.realName || '',
@@ -251,6 +278,34 @@ async function dedupeMyUser(openid) {
   };
 }
 
+async function registerVisitStoreIntent(event, openid, req) {
+  if (!openid) {
+    return { success: false, errMsg: '无法获取用户身份' };
+  }
+  if (req && req.client !== 'merchant') {
+    return { success: false, errMsg: '仅商家端可登记邀请' };
+  }
+
+  const storeId = (event.store_id || '').trim();
+  if (!storeId) {
+    return { success: false, errMsg: '缺少 store_id' };
+  }
+
+  let unionid = (req && req.auth && req.auth.unionid) || '';
+  if (!unionid) {
+    const records = await fetchUsersByOpenid(openid);
+    const doc = pickCanonicalUser(records) || records[0];
+    unionid = (doc && doc.unionid) || '';
+  }
+
+  const visitStoreIntentService = require('./visitStoreIntentService');
+  return visitStoreIntentService.registerIntent({
+    unionid,
+    storeId,
+    sourceOpenid: openid
+  });
+}
+
 async function bindUserStore(event, openid) {
   if (!openid) {
     return { success: false, errMsg: '无法获取用户身份' };
@@ -268,11 +323,16 @@ async function bindUserStore(event, openid) {
 
   const doc = await getOrCreateUser(openid);
   const now = Date.now();
+  // 换绑只改 visit；若已有商家身份，显式保留 merchantStoreId，避免被 visit 覆盖
+  const merchantStoreId = userFields.resolveMerchantStoreId(doc);
   const updateData = {
     visitStoreId: storeId,
     store_id: storeId,
     updateTime: now
   };
+  if (merchantStoreId) {
+    updateData.merchantStoreId = merchantStoreId;
+  }
 
   const updated = await db.updateById('users', doc._id, updateData);
   return { success: true, user: formatUser(updated), store: storeDocs[0] };
@@ -344,6 +404,19 @@ async function ping(openid) {
   };
 }
 
+async function createOaBindQr(openid) {
+  if (!openid) {
+    return { success: false, errMsg: '无法获取用户身份' };
+  }
+  const oaBindTicketService = require('./oaBindTicketService');
+  try {
+    return await oaBindTicketService.createBindQr(openid);
+  } catch (err) {
+    console.error('[userService] createOaBindQr failed', err.message || err);
+    return { success: false, errMsg: (err && err.message) || '生成关注二维码失败' };
+  }
+}
+
 async function handle(event, openid, req) {
   switch (event.action) {
     case 'ping':
@@ -351,7 +424,7 @@ async function handle(event, openid, req) {
     case 'initDatabase':
       return initDatabase();
     case 'getUserInfo':
-      return getUserInfo(openid);
+      return getUserInfo(openid, req);
     case 'syncProfile':
       return syncProfile(event, openid);
     case 'bindPhone':
@@ -360,8 +433,12 @@ async function handle(event, openid, req) {
       return dedupeMyUser(openid);
     case 'bindUserStore':
       return bindUserStore(event, openid);
+    case 'registerVisitStoreIntent':
+      return registerVisitStoreIntent(event, openid, req);
     case 'setMerchantProfile':
       return setMerchantProfile(event, openid);
+    case 'createOaBindQr':
+      return createOaBindQr(openid);
     default:
       return { success: false, errMsg: '未知操作' };
   }

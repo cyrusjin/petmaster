@@ -19,7 +19,7 @@
 登录接口：`POST /api/auth/login`，body 带 `client: "user" | "merchant"`。  
 两端 openid 不同，服务端用 UnionID / 手机号 / `openids.*` 对齐到同一业务用户。
 
-## 2.1 服务号模板消息
+## 2.1 服务号模板消息与关注欢迎
 
 | 变量 | 说明 |
 |------|------|
@@ -28,9 +28,18 @@
 | `WX_OA_AES_KEY` | 可选；安全模式 EncodingAESKey |
 | `WX_OA_TEMPLATE_*` | 新订单 / 订单状态 / 打卡 模板 ID |
 | `WX_OA_QRCODE_URL` | 小程序引导关注用的二维码图 |
+| `WX_OA_WELCOME_TEXT` | 关注被动回复欢迎文案 |
 | `TENCENT_MAP_KEY` | 腾讯位置服务 WebServiceAPI Key（接送驾车距离） |
 
 回调 URL：`https://api.petmaster.me/api/wechat/oa`（明文或兼容模式）。用户关注后通过 UnionID 写入 `users.openids.oa`。
+
+关注欢迎流程：
+
+1. 公众号后台进入开发者模式，服务器 URL 填上述回调地址，Token 与 `WX_OA_TOKEN` 一致
+2. 商家分享链接：`https://api.petmaster.me/s/{store_id}`；扫码关注时 EventKey 为 `qrscene_s_{store_id}`
+3. 关注/扫码后登记店铺意向（`visitStoreIntent`），并被动回复欢迎文字；**不再推送小程序卡片**
+4. 修改 `.env` 后执行 `pm2 restart petmaster-api`
+5. 测试：打开分享链接 → 关注服务号 → 应收到欢迎文字，打开商家分享的小程序卡片即可绑定店铺
 
 接送按距离计费时，小程序通过 `GET/POST /api/map/driving-distance` 由服务端代理腾讯驾车距离接口。
 
@@ -63,7 +72,8 @@ sudo mkdir -p petmaster && sudo chown $USER:$USER petmaster
 cd /opt/petmaster/server
 cp .env.example .env
 # 编辑 .env：填入 MONGO_URI、JWT_SECRET、WX_*、MEDIA_*
-mkdir -p /opt/petmaster/media
+mkdir -p /opt/petmaster/media/_tmp
+# 确保 Node 进程用户（如 pm2 运行用户）对 media 目录可写
 npm install --production
 ```
 
@@ -123,6 +133,24 @@ ADMIN_JWT_EXPIRES_IN=8h
    - request 合法域名：`https://api.petmaster.me`
    - uploadFile / downloadFile 合法域名：`https://api.petmaster.me`
 3. 两端绑定同一微信开放平台账号，可自动拿到 UnionID 打通身份
+
+## 8.1 上传图片内容安全（微信免费接口）
+
+上传接口会：
+
+1. **同步** `imgSecCheck`：压缩后审图，违规直接返回失败（客户端拿不到 URL，正式内容不会展示）
+2. **异步** `mediaCheckAsync`：结果经小程序消息推送回传；若判定违规则删除服务器文件（之后图片会加载失败）
+
+需在**宠主端、商家端**两个小程序后台都配置消息推送（开发 → 开发管理 → 消息推送）：
+
+| 项 | 值 |
+| --- | --- |
+| URL | `https://api.petmaster.me/api/wechat/mp` |
+| Token | 与 `.env` 中 `WX_MP_TOKEN` 一致（未配则用 `WX_OA_TOKEN`） |
+| 加密方式 | 建议明文联调，或安全模式并配置 `WX_MP_AES_KEY` |
+| 数据格式 | 建议 JSON |
+
+修改 `.env` 后执行 `pm2 restart petmaster-api`。服务器需已安装 `ffmpeg`（同步审图压缩、视频封面抽帧都依赖它）。
 
 ## 9. 本地媒体目录
 

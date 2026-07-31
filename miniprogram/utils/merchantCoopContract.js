@@ -2,7 +2,8 @@
  * 商家入驻平台合作协议文案与构建
  */
 
-const PLATFORM_NAME = '宠物寄养服务平台';
+const PLATFORM_NAME = '熠森宠物管家';
+const PLATFORM_ENTITY = '西安熠森网络科技有限公司';
 
 function buildClauseSections() {
   return [
@@ -61,8 +62,7 @@ function buildPartyB() {
   return {
     label: '乙方（平台方）',
     name: PLATFORM_NAME,
-    role: '平台运营方',
-    contact: '以平台公示客服渠道为准'
+    role: PLATFORM_ENTITY
   };
 }
 
@@ -84,7 +84,6 @@ function buildMerchantCoopContract(input) {
     `${partyB.label}`,
     `平台名称：${partyB.name}`,
     `主体身份：${partyB.role}`,
-    `联系方式：${partyB.contact}`,
     '',
     ...sections.flatMap((sec) => [
       sec.title,
@@ -109,5 +108,6 @@ function buildMerchantCoopContract(input) {
 
 module.exports = {
   PLATFORM_NAME,
+  PLATFORM_ENTITY,
   buildMerchantCoopContract
 };

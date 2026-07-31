@@ -8,7 +8,7 @@ const { connectDb, collection } = require('../db');
 
 const TARGETS = [
   { name: 'users', fields: ['avatarUrl'] },
-  { name: 'stores', fields: ['logo', 'storePhotos'] },
+  { name: 'stores', fields: ['logo', 'storePhotos', 'introPhotos', 'noticePhotos', 'businessLicense'] },
   { name: 'pets', fields: ['photo'] },
   { name: 'orders', fields: ['petPhoto', 'storeLogo', 'petSnapshot.photo'] },
   { name: 'daily_logs', fields: ['images', 'video'] }

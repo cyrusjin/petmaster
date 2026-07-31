@@ -118,6 +118,15 @@ async function resolveLoginUser({ openid, unionid, client }) {
     } catch (err) {
       console.warn('[identity] attachPendingOaByUnionid failed', err.message || err);
     }
+    if (appClient === 'user') {
+      try {
+        const visitStoreIntentService = require('./visitStoreIntentService');
+        const consumed = await visitStoreIntentService.consumeIntentForUser(user);
+        if (consumed.consumed) user = consumed.user;
+      } catch (err) {
+        console.warn('[identity] consumeIntentForUser failed', err.message || err);
+      }
+    }
     return user;
   }
 
@@ -148,6 +157,15 @@ async function resolveLoginUser({ openid, unionid, client }) {
     newUser = await oaBindService.attachPendingOaByUnionid(newUser, unionid);
   } catch (err) {
     console.warn('[identity] attachPendingOaByUnionid failed', err.message || err);
+  }
+  if (appClient === 'user') {
+    try {
+      const visitStoreIntentService = require('./visitStoreIntentService');
+      const consumed = await visitStoreIntentService.consumeIntentForUser(newUser);
+      if (consumed.consumed) newUser = consumed.user;
+    } catch (err) {
+      console.warn('[identity] consumeIntentForUser failed', err.message || err);
+    }
   }
   return newUser;
 }

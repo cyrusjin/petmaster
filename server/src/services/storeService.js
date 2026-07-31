@@ -3,6 +3,9 @@ const oss = require('../oss');
 const wechat = require('../wechat');
 const identity = require('./identity');
 const userFields = require('./userFields');
+const notifyService = require('./notifyService');
+const oaBindService = require('./oaBindService');
+const oaBindTicketService = require('./oaBindTicketService');
 
 function formatStore(doc) {
   const latitude = parseFloat(doc.latitude);
@@ -20,15 +23,19 @@ function formatStore(doc) {
     hours: doc.hours || '',
     businessHours: doc.businessHours || null,
     intro: doc.intro || '',
+    introPhotos: Array.isArray(doc.introPhotos) ? doc.introPhotos : [],
     range: formatReceptionRangeText(doc.receptionRange || doc.range),
     receptionRange: normalizeReceptionRange(doc.receptionRange || doc.range),
     storePhotos: Array.isArray(doc.storePhotos) ? doc.storePhotos : [],
+    businessLicense: doc.businessLicense || '',
     notice: doc.notice || '',
+    noticePhotos: Array.isArray(doc.noticePhotos) ? doc.noticePhotos : [],
     pickupService: doc.pickupService === 'yes' ? 'yes' : 'no',
     pickupNotice: doc.pickupNotice || '',
     pickupPricingMode: doc.pickupPricingMode === 'distance' ? 'distance' : 'flat',
     pickupFlatPrice: doc.pickupFlatPrice != null ? doc.pickupFlatPrice : '',
     pickupPricePerKm: doc.pickupPricePerKm != null ? doc.pickupPricePerKm : '',
+    pickupFreeMinDays: normalizePickupFreeMinDays(doc.pickupFreeMinDays),
     deposit: normalizeDeposit(doc.deposit),
     compensationLimit: doc.compensationLimit != null ? doc.compensationLimit : null,
     boardingContractClauseText: doc.boardingContractClauseText || '',
@@ -92,6 +99,13 @@ function normalizePickupMoney(value) {
   return Math.round(num * 100) / 100;
 }
 
+function normalizePickupFreeMinDays(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const num = parseInt(value, 10);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  return num;
+}
+
 function normalizeCompensationLimit(value) {
   if (value === '' || value === null || value === undefined) return null;
   const num = parseFloat(value);
@@ -140,14 +154,37 @@ function resolveStoreDisplayNo(doc) {
   return seed ? deriveDisplayNo(`store:${seed}`) : '';
 }
 
+async function resolveRoomPricingPhotos(billingRules) {
+  if (!billingRules || !Array.isArray(billingRules.roomPricing) || !billingRules.roomPricing.length) {
+    return billingRules || null;
+  }
+  const roomPricing = await Promise.all(billingRules.roomPricing.map(async (room) => {
+    if (!room || typeof room !== 'object') return room;
+    const photo = room.photo || '';
+    if (!photo) return room;
+    const resolved = (await oss.resolveMediaUrl(photo)) || photo;
+    if (resolved === photo) return room;
+    return { ...room, photo: resolved };
+  }));
+  return { ...billingRules, roomPricing };
+}
+
 async function resolveStoreMediaUrls(store) {
   if (!store) return store;
   const photos = Array.isArray(store.storePhotos) ? store.storePhotos.filter(Boolean) : [];
+  const introPhotos = Array.isArray(store.introPhotos) ? store.introPhotos.filter(Boolean) : [];
+  const noticePhotos = Array.isArray(store.noticePhotos) ? store.noticePhotos.filter(Boolean) : [];
   const logo = store.logo || '';
+  const businessLicense = store.businessLicense || '';
+  const billingRules = await resolveRoomPricingPhotos(store.billingRules);
   return {
     ...store,
     logo: (await oss.resolveMediaUrl(logo)) || logo,
-    storePhotos: (await oss.resolveMediaUrls(photos)).filter(Boolean)
+    businessLicense: (await oss.resolveMediaUrl(businessLicense)) || businessLicense,
+    storePhotos: (await oss.resolveMediaUrls(photos)).filter(Boolean),
+    introPhotos: (await oss.resolveMediaUrls(introPhotos)).filter(Boolean),
+    noticePhotos: (await oss.resolveMediaUrls(noticePhotos)).filter(Boolean),
+    billingRules
   };
 }
 
@@ -277,12 +314,21 @@ function buildStorePatch(shop, existing, now) {
       ? shop.businessHours
       : (existingDoc.businessHours || null),
     intro: hasShopField(shop, 'intro') ? String(shop.intro || '') : (existingDoc.intro || ''),
+    introPhotos: hasShopField(shop, 'introPhotos') && Array.isArray(shop.introPhotos)
+      ? sanitizeStorePhotoList(shop.introPhotos, existingDoc.introPhotos)
+      : sanitizeStorePhotoList(existingDoc.introPhotos, existingDoc.introPhotos),
     range: formatReceptionRangeText(receptionSource),
     receptionRange: normalizeReceptionRange(receptionSource),
     storePhotos: hasShopField(shop, 'storePhotos') && Array.isArray(shop.storePhotos)
       ? sanitizeStorePhotoList(shop.storePhotos, existingDoc.storePhotos)
       : sanitizeStorePhotoList(existingDoc.storePhotos, existingDoc.storePhotos),
+    businessLicense: hasShopField(shop, 'businessLicense')
+      ? sanitizeStoreLogo(shop.businessLicense || '', existingDoc.businessLicense || '')
+      : (existingDoc.businessLicense || ''),
     notice: hasShopField(shop, 'notice') ? String(shop.notice || '') : (existingDoc.notice || ''),
+    noticePhotos: hasShopField(shop, 'noticePhotos') && Array.isArray(shop.noticePhotos)
+      ? sanitizeStorePhotoList(shop.noticePhotos, existingDoc.noticePhotos)
+      : sanitizeStorePhotoList(existingDoc.noticePhotos, existingDoc.noticePhotos),
     pickupService: hasShopField(shop, 'pickupService')
       ? (shop.pickupService === 'yes' ? 'yes' : 'no')
       : (existingDoc.pickupService === 'yes' ? 'yes' : 'no'),
@@ -298,6 +344,9 @@ function buildStorePatch(shop, existing, now) {
     pickupPricePerKm: hasShopField(shop, 'pickupPricePerKm')
       ? normalizePickupMoney(shop.pickupPricePerKm)
       : normalizePickupMoney(existingDoc.pickupPricePerKm),
+    pickupFreeMinDays: hasShopField(shop, 'pickupFreeMinDays')
+      ? normalizePickupFreeMinDays(shop.pickupFreeMinDays)
+      : normalizePickupFreeMinDays(existingDoc.pickupFreeMinDays),
     deposit: hasShopField(shop, 'deposit')
       ? normalizeDeposit(shop.deposit)
       : normalizeDeposit(existingDoc.deposit),
@@ -483,6 +532,10 @@ async function submitMerchantApply(event, openid) {
   const longitude = parseCoord(shop.longitude);
   const storePhotos = (Array.isArray(shop.storePhotos) ? shop.storePhotos : [])
     .filter((url) => oss.isStoredMedia(url));
+  const businessLicenseRaw = typeof shop.businessLicense === 'string' ? shop.businessLicense.trim() : '';
+  const businessLicense = businessLicenseRaw && oss.isStoredMedia(businessLicenseRaw)
+    ? businessLicenseRaw
+    : '';
 
   if (!name) return { success: false, errMsg: '请填写店铺名称' };
   if (!address) return { success: false, errMsg: '请选择营业地址' };
@@ -496,6 +549,19 @@ async function submitMerchantApply(event, openid) {
     return { success: false, errMsg: '请先签署入驻合作协议' };
   }
 
+  const coopSnapshot = normalizeCoopContractSnapshot(shop.coopContractSnapshot);
+  if (!coopSnapshot) {
+    return { success: false, errMsg: '入驻协议内容无效，请重新签署' };
+  }
+
+  const notifyAdminsAfterApply = async (storeDoc) => {
+    const user = await identity.findPrimaryUserByOpenid(openid);
+    const applicantName = legalName
+      || (user && (user.realName || user.nickName))
+      || name;
+    notifyService.notifyAdminsMerchantApply(storeDoc, { applicantName }).catch(() => {});
+  };
+
   const now = Date.now();
   const data = await db.findMany('stores', { ownerOpenid: openid }, { limit: 1 });
   const applyPatch = {
@@ -508,9 +574,10 @@ async function submitMerchantApply(event, openid) {
     contactPhone,
     legalName,
     storePhotos,
+    businessLicense,
     coopContractSigned: true,
-    coopContractSignTime: shop.coopContractSignTime || '',
-    coopContractSnapshot: shop.coopContractSnapshot || null,
+    coopContractSignTime: shop.coopContractSignTime || coopSnapshot.signTime || '',
+    coopContractSnapshot: coopSnapshot,
     merchantApplyStatus: 'pending',
     rejectReason: '',
     updateTime: now
@@ -524,14 +591,17 @@ async function submitMerchantApply(event, openid) {
       hours: '',
       businessHours: null,
       intro: '',
+      introPhotos: [],
       range: '',
       receptionRange: [],
       notice: '',
+      noticePhotos: [],
       pickupService: 'no',
       pickupNotice: '',
       pickupPricingMode: 'flat',
       pickupFlatPrice: '',
       pickupPricePerKm: '',
+      pickupFreeMinDays: '',
       deposit: 0,
       status: '未营业',
       billingRules: null,
@@ -542,15 +612,19 @@ async function submitMerchantApply(event, openid) {
     };
     await db.insertOne('stores', newStore);
     await syncUserStoreLink(openid, storeId, { pending: true });
-    return { success: true, store: formatStore(newStore) };
+    const formatted = formatStore(newStore);
+    await notifyAdminsAfterApply(formatted);
+    return { success: true, store: formatted };
   }
 
   const existing = data[0];
   await db.updateById('stores', existing._id, applyPatch);
   await syncUserStoreLink(openid, existing.store_id, { pending: true });
+  const formatted = formatStore({ ...existing, ...applyPatch, store_id: existing.store_id });
+  await notifyAdminsAfterApply(formatted);
   return {
     success: true,
-    store: formatStore({ ...existing, ...applyPatch, store_id: existing.store_id })
+    store: formatted
   };
 }
 
@@ -563,6 +637,31 @@ function formatApplyTime(ts) {
   }
 }
 
+function normalizeCoopContractSnapshot(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const partyA = raw.partyA && typeof raw.partyA === 'object' ? raw.partyA : null;
+  const partyB = raw.partyB && typeof raw.partyB === 'object' ? raw.partyB : null;
+  const sections = Array.isArray(raw.sections) ? raw.sections : [];
+  const bodyText = String(raw.bodyText || '').trim();
+  if (!bodyText && !partyA) return null;
+  return {
+    title: String(raw.title || '商家入驻平台合作协议').trim() || '商家入驻平台合作协议',
+    partyA,
+    partyB: partyB
+      ? {
+          label: partyB.label || '乙方（平台方）',
+          name: partyB.name || '',
+          role: partyB.role || ''
+        }
+      : null,
+    sections,
+    bodyText,
+    signed: true,
+    signTime: String(raw.signTime || '').trim(),
+    signMethod: String(raw.signMethod || 'electronic').trim() || 'electronic'
+  };
+}
+
 async function listPendingMerchantApplications() {
   const pendingStores = await db.findMany(
     'stores',
@@ -573,21 +672,7 @@ async function listPendingMerchantApplications() {
   const applications = [];
   for (let i = 0; i < (pendingStores || []).length; i += 1) {
     const storeDoc = pendingStores[i];
-    let applicantName = '';
-    let applicantPhone = '';
-
-    const users = await db.findMany('users', {
-      $or: [
-        { merchantStoreId: storeDoc.store_id },
-        { openid: storeDoc.ownerOpenid }
-      ]
-    }, { limit: 1 });
-
-    if (users.length) {
-      applicantName = users[0].realName || users[0].nickName || '';
-      applicantPhone = users[0].phone || '';
-    }
-
+    const applicant = await findStoreApplicant(storeDoc);
     const store = await resolveStoreMediaUrls(formatStore(storeDoc));
     applications.push({
       store_id: store.store_id,
@@ -599,10 +684,15 @@ async function listPendingMerchantApplications() {
       latitude: store.latitude,
       longitude: store.longitude,
       storePhotos: store.storePhotos,
+      businessLicense: store.businessLicense || '',
+      hasBusinessLicense: !!(store.businessLicense),
       coopContractSigned: store.coopContractSigned,
       coopContractSignTime: store.coopContractSignTime,
-      applicantName,
-      applicantPhone,
+      hasCoopContract: !!(storeDoc.coopContractSnapshot && storeDoc.coopContractSigned),
+      applicantName: applicant.applicantName,
+      applicantNickName: applicant.applicantNickName,
+      applicantOpenid: applicant.applicantOpenid,
+      applicantPhone: applicant.applicantPhone,
       applyTime: storeDoc.updateTime || storeDoc.createTime || 0,
       applyTimeText: formatApplyTime(storeDoc.updateTime || storeDoc.createTime)
     });
@@ -628,6 +718,7 @@ async function reviewMerchantApplication(event) {
   if (!ownerOpenid) return { success: false, errMsg: '缺少商家账号信息' };
 
   const now = Date.now();
+  const applicant = await findStoreApplicant(storeDoc);
   if (decision === 'approve') {
     await db.updateById('stores', storeDoc._id, {
       merchantApplyStatus: 'approved',
@@ -635,6 +726,14 @@ async function reviewMerchantApplication(event) {
       updateTime: now
     });
     await syncUserStoreLink(ownerOpenid, storeId, { pending: false });
+    notifyService.notifyMerchantApplyApproved(
+      { ...storeDoc, merchantApplyStatus: 'approved', rejectReason: '', updateTime: now },
+      applicant
+    ).then((result) => {
+      console.log('[notify] merchantApplyApproved', storeId, result ? 'sent' : 'skipped');
+    }).catch((err) => {
+      console.warn('[notify] merchantApplyApproved failed', storeId, err.message || err);
+    });
     return { success: true };
   }
 
@@ -645,6 +744,15 @@ async function reviewMerchantApplication(event) {
     updateTime: now
   });
   await syncUserStoreLink(ownerOpenid, storeId, { rejected: true });
+  notifyService.notifyMerchantApplyRejected(
+    { ...storeDoc, merchantApplyStatus: 'rejected', rejectReason, updateTime: now },
+    applicant,
+    rejectReason
+  ).then((result) => {
+    console.log('[notify] merchantApplyRejected', storeId, result ? 'sent' : 'skipped');
+  }).catch((err) => {
+    console.warn('[notify] merchantApplyRejected failed', storeId, err.message || err);
+  });
   return { success: true };
 }
 
@@ -699,20 +807,32 @@ async function enableStoreMembers(storeDoc) {
 
 async function findStoreApplicant(storeDoc) {
   let applicantName = '';
+  let applicantNickName = '';
   let applicantPhone = '';
+  const applicantOpenid = (storeDoc && storeDoc.ownerOpenid) || '';
+
   const users = await db.findMany('users', {
     $or: [
       { merchantStoreId: storeDoc.store_id },
-      { openid: storeDoc.ownerOpenid }
+      { openid: storeDoc.ownerOpenid },
+      { 'openids.merchant': storeDoc.ownerOpenid },
+      { 'openids.user': storeDoc.ownerOpenid }
     ]
   }, { limit: 1 });
 
   if (users.length) {
-    applicantName = users[0].realName || users[0].nickName || '';
-    applicantPhone = users[0].phone || '';
+    const user = users[0];
+    applicantNickName = (user.nickName || '').trim();
+    applicantName = (user.realName || user.nickName || '').trim();
+    applicantPhone = user.phone || '';
   }
 
-  return { applicantName, applicantPhone };
+  return {
+    applicantName,
+    applicantNickName,
+    applicantOpenid,
+    applicantPhone
+  };
 }
 
 function buildAdminStoreFilter(query = {}) {
@@ -740,6 +860,27 @@ function buildAdminStoreFilter(query = {}) {
   return filter;
 }
 
+async function resolveOwnerOaBind(ownerOpenid) {
+  const openid = String(ownerOpenid || '').trim();
+  if (!openid) {
+    return { ownerOaOpenid: '', ownerOaBound: false };
+  }
+  let user = await identity.findPrimaryUserByOpenid(openid);
+  let oaOpenid = oaBindService.getOaOpenidFromUser(user);
+  if (!oaOpenid) {
+    try {
+      user = await oaBindTicketService.repairOaBindFromTickets(openid);
+      oaOpenid = oaBindService.getOaOpenidFromUser(user);
+    } catch (err) {
+      console.warn('[admin] repair owner oa bind failed', err.message || err);
+    }
+  }
+  return {
+    ownerOaOpenid: oaOpenid || '',
+    ownerOaBound: !!oaOpenid
+  };
+}
+
 async function listAdminStores(query = {}) {
   const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 200);
   const skip = Math.max(parseInt(query.skip, 10) || 0, 0);
@@ -753,8 +894,9 @@ async function listAdminStores(query = {}) {
   const items = [];
   for (let i = 0; i < (stores || []).length; i += 1) {
     const storeDoc = stores[i];
-    const { applicantName, applicantPhone } = await findStoreApplicant(storeDoc);
-    const store = formatStore(storeDoc);
+    const applicant = await findStoreApplicant(storeDoc);
+    const store = await resolveStoreMediaUrls(formatStore(storeDoc));
+    const oaBind = await resolveOwnerOaBind(storeDoc.ownerOpenid || applicant.applicantOpenid || '');
     items.push({
       store_id: store.store_id,
       displayNo: store.displayNo,
@@ -766,14 +908,23 @@ async function listAdminStores(query = {}) {
       businessStatus: store.status,
       rejectReason: store.rejectReason,
       adminDisableReason: store.adminDisableReason,
-      applicantName,
-      applicantPhone,
+      applicantName: applicant.applicantName,
+      applicantNickName: applicant.applicantNickName,
+      applicantOpenid: applicant.applicantOpenid,
+      applicantPhone: applicant.applicantPhone,
+      ownerOaOpenid: oaBind.ownerOaOpenid,
+      ownerOaBound: oaBind.ownerOaBound,
       applyTime: storeDoc.createTime || 0,
       applyTimeText: formatApplyTime(storeDoc.createTime),
       updateTime: storeDoc.updateTime || storeDoc.createTime || 0,
       updateTimeText: formatApplyTime(storeDoc.updateTime || storeDoc.createTime),
       adminDisabledAt: store.adminDisabledAt,
-      adminDisabledAtText: formatApplyTime(store.adminDisabledAt)
+      adminDisabledAtText: formatApplyTime(store.adminDisabledAt),
+      coopContractSigned: !!storeDoc.coopContractSigned,
+      coopContractSignTime: storeDoc.coopContractSignTime || '',
+      hasCoopContract: !!(storeDoc.coopContractSnapshot && storeDoc.coopContractSigned),
+      businessLicense: store.businessLicense || '',
+      hasBusinessLicense: !!(store.businessLicense)
     });
   }
 
@@ -783,6 +934,79 @@ async function listAdminStores(query = {}) {
     total,
     limit,
     skip
+  };
+}
+
+/**
+ * 官网后台手动写入/清空店主 openids.oa（不依赖 UnionID，用于补救推送收不到）
+ */
+async function bindAdminStoreOa(event = {}) {
+  const storeId = String(event.store_id || '').trim();
+  const oaOpenid = String(event.oa_openid || event.oaOpenid || '').trim();
+  if (!storeId) return { success: false, errMsg: '缺少店铺 ID' };
+
+  const data = await db.findMany('stores', { store_id: storeId }, { limit: 1 });
+  if (!data.length) return { success: false, errMsg: '店铺不存在' };
+
+  const storeDoc = data[0];
+  const ownerOpenid = String(storeDoc.ownerOpenid || '').trim();
+  if (!ownerOpenid) return { success: false, errMsg: '店铺缺少店主 openid' };
+
+  const user = await identity.findPrimaryUserByOpenid(ownerOpenid);
+  if (!user) return { success: false, errMsg: '找不到店主用户账号' };
+
+  if (!oaOpenid) {
+    const currentOa = oaBindService.getOaOpenidFromUser(user);
+    if (currentOa) {
+      await oaBindService.clearOaOpenid(currentOa);
+    }
+    return {
+      success: true,
+      store_id: storeId,
+      ownerOpenid,
+      ownerOaOpenid: '',
+      ownerOaBound: false
+    };
+  }
+
+  if (oaOpenid.length < 10) {
+    return { success: false, errMsg: '服务号 openid 格式不正确' };
+  }
+
+  // 避免同一 OA openid 挂在多个用户上
+  await oaBindService.clearOaOpenid(oaOpenid);
+  const refreshed = await identity.findPrimaryUserByOpenid(ownerOpenid);
+  await oaBindService.bindOaOpenidToUser(refreshed || user, oaOpenid, '');
+
+  return {
+    success: true,
+    store_id: storeId,
+    ownerOpenid,
+    ownerOaOpenid: oaOpenid,
+    ownerOaBound: true
+  };
+}
+
+async function getAdminCoopContract(event = {}) {
+  const storeId = (event.store_id || '').trim();
+  if (!storeId) return { success: false, errMsg: '缺少店铺 ID' };
+
+  const data = await db.findMany('stores', { store_id: storeId }, { limit: 1 });
+  if (!data.length) return { success: false, errMsg: '店铺不存在' };
+
+  const storeDoc = data[0];
+  const snapshot = storeDoc.coopContractSnapshot || null;
+  if (!storeDoc.coopContractSigned || !snapshot) {
+    return { success: false, errMsg: '该店铺尚未签署入驻协议' };
+  }
+
+  return {
+    success: true,
+    store_id: storeDoc.store_id,
+    storeName: storeDoc.name || '',
+    coopContractSigned: true,
+    coopContractSignTime: storeDoc.coopContractSignTime || snapshot.signTime || '',
+    contract: snapshot
   };
 }
 
@@ -1017,6 +1241,68 @@ async function getStoreQrCode(event, openid) {
   }
 }
 
+/**
+ * 商家分享给客人：带 store_id 的服务号邀请链接
+ */
+async function getStoreOaShareLink(event, openid) {
+  if (!openid) {
+    return { success: false, errMsg: '无法获取用户身份' };
+  }
+
+  const storeDoc = await resolveMerchantStoreDoc(openid);
+  if (!storeDoc) {
+    return { success: false, errMsg: '请先申请入驻' };
+  }
+  if (!(await canManageStoreDoc(storeDoc, openid))) {
+    return { success: false, errMsg: '无权分享该店铺' };
+  }
+
+  const requestedId = String((event && event.store_id) || '').trim();
+  if (requestedId && requestedId !== storeDoc.store_id) {
+    return { success: false, errMsg: '无权分享该店铺' };
+  }
+
+  try {
+    const oaShareService = require('./oaShareService');
+    const oaPosterService = require('./oaPosterService');
+    const qr = await oaShareService.ensureStoreOaQr(storeDoc);
+    const fresh = (await oaShareService.findStoreById(storeDoc.store_id)) || storeDoc;
+    const logoRaw = fresh.logo || '';
+    const storeLogo = (await oss.resolveMediaUrl(logoRaw)) || logoRaw;
+    const storeName = fresh.name || '宠物寄养';
+    const shareUrl = qr.shareUrl || oaShareService.buildPublicShareUrl(fresh.store_id);
+    const shareText = `${storeName}邀请你关注「猫森宠物」预约寄养\n${shareUrl}`;
+    let posterUrl = oaPosterService.buildPublicPosterUrl(fresh.store_id);
+    try {
+      const poster = await oaPosterService.buildStoreSharePoster({
+        storeDoc: fresh,
+        showQrcodeUrl: qr.showQrcodeUrl
+      });
+      posterUrl = poster.posterUrl || posterUrl;
+    } catch (posterErr) {
+      console.warn('buildStoreSharePoster failed', posterErr.message || posterErr);
+    }
+
+    return {
+      success: true,
+      store_id: fresh.store_id,
+      storeName,
+      storeLogo,
+      shareUrl,
+      shareText,
+      qrcodeUrl: qr.qrcodeUrl || qr.showQrcodeUrl,
+      posterUrl,
+      sceneStr: qr.sceneStr
+    };
+  } catch (err) {
+    console.error('getStoreOaShareLink failed', err);
+    return {
+      success: false,
+      errMsg: (err && err.message) || '生成服务号邀请链接失败'
+    };
+  }
+}
+
 async function handle(event, openid) {
   switch (event.action) {
     case 'getStore':
@@ -1038,6 +1324,8 @@ async function handle(event, openid) {
       return acceptStaffInvite(event, openid);
     case 'getStoreQrCode':
       return getStoreQrCode(event, openid);
+    case 'getStoreOaShareLink':
+      return getStoreOaShareLink(event, openid);
     default:
       return { success: false, errMsg: '未知操作' };
   }
@@ -1050,5 +1338,7 @@ module.exports = {
   listPendingMerchantApplications,
   reviewMerchantApplication,
   listAdminStores,
+  bindAdminStoreOa,
+  getAdminCoopContract,
   updateAdminStoreAccess
 };

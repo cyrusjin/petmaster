@@ -188,6 +188,67 @@ function saveUploadedFile(objectKey, tempPath) {
   return buildPublicUrl(objectKey);
 }
 
+function deleteStoredMedia(urlOrKey) {
+  const key = extractObjectKey(urlOrKey) || sanitizeObjectKey(urlOrKey);
+  if (!key) return false;
+  try {
+    const fullPath = absolutePathForKey(key);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[oss] delete media failed', key, err.message || err);
+  }
+  return false;
+}
+
+function mediaFileExists(urlOrKey) {
+  const key = extractObjectKey(urlOrKey) || '';
+  if (!key) return false;
+  try {
+    return fs.existsSync(absolutePathForKey(key));
+  } catch (_) {
+    return false;
+  }
+}
+
+/** 生成符合 imgSecCheck 限制的临时压缩图（≤750x1334，尽量 <1MB） */
+async function createImageCheckCopy(sourcePath) {
+  if (!sourcePath || !fs.existsSync(sourcePath)) {
+    throw new Error('源图片不存在');
+  }
+  ensureMediaRoot();
+  const tmpDir = path.join(config.media.root, '_tmp');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const outPath = path.join(tmpDir, `sec_${Date.now()}_${crypto.randomBytes(3).toString('hex')}.jpg`);
+  const qualities = ['6', '8', '10', '12'];
+  let lastErr = null;
+  for (const q of qualities) {
+    try {
+      await execFileAsync('ffmpeg', [
+        '-y',
+        '-i', sourcePath,
+        '-vf', "scale='min(750,iw)':'min(1334,ih)':force_original_aspect_ratio=decrease",
+        '-frames:v', '1',
+        '-q:v', q,
+        outPath
+      ], { timeout: 30000 });
+      if (!fs.existsSync(outPath)) continue;
+      const size = fs.statSync(outPath).size;
+      if (size > 0 && size <= 1024 * 1024) {
+        return outPath;
+      }
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) {
+    return outPath;
+  }
+  throw lastErr || new Error('生成审图压缩副本失败');
+}
+
 async function resolveMediaUrls(urls) {
   const list = Array.isArray(urls) ? urls : [];
   const resolved = [];
@@ -211,5 +272,8 @@ module.exports = {
   createPostPolicy,
   uploadBuffer,
   saveUploadedFile,
+  deleteStoredMedia,
+  mediaFileExists,
+  createImageCheckCopy,
   absolutePathForKey
 };

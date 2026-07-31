@@ -2,6 +2,17 @@ const { dedupeDailyLogs, getLogId } = require('./dailyLogUtil');
 const { formatTimeLabel } = require('./dailyTimeline');
 const { resolveVideoUrl, resolveVideoCoverUrl } = require('./mediaUrl');
 
+function isUnpublishedScheduledLog(log) {
+  if (!log) return false;
+  if (log.status === 'scheduled') return true;
+  if (log.status === 'published') return false;
+  if (log.publishedAt) return false;
+  const scheduledAt = Number(log.scheduledAt) || 0;
+  if (log.isScheduled && scheduledAt > Date.now()) return true;
+  if (scheduledAt > Date.now()) return true;
+  return false;
+}
+
 function getUserScopedOrders(app) {
   const storeId = app.getStoreId();
   return (app.getOrders() || []).filter((o) => !storeId || o.store_id === storeId);
@@ -15,7 +26,10 @@ function getUserScopedDailyLogs(app, orders) {
   return dedupeDailyLogs(
     (app.getDailyLogs() || []).filter((log) => {
       const oid = log.orderId || log.order_id;
-      return oid && orderIds.has(oid);
+      if (!oid || !orderIds.has(oid)) return false;
+      // 未到点的预约打卡不对宠主展示
+      if (isUnpublishedScheduledLog(log)) return false;
+      return true;
     })
   );
 }
@@ -35,7 +49,9 @@ function mergeDailyLogsForOrders(existing, fetched, orderIds) {
     const oid = item.orderId || item.order_id;
     return !oid || !idSet.has(oid);
   });
-  const merged = dedupeDailyLogs(others.concat(fetched || []));
+  // 服务端若尚未过滤预约记录，客户端兜底剔除
+  const safeFetched = (fetched || []).filter((log) => !isUnpublishedScheduledLog(log));
+  const merged = dedupeDailyLogs(others.concat(safeFetched));
   const sig = (list) => list
     .map((log) => `${getLogId(log)}:${log.updateTime || log.createTime || 0}:${log.videoUrl || ''}:${log.videoCoverUrl || ''}`)
     .sort()
@@ -130,5 +146,6 @@ module.exports = {
   getUserBoardingOrderIds,
   mergeDailyLogsForOrders,
   buildDailyViewLogs,
-  persistResolvedVideoUrls
+  persistResolvedVideoUrls,
+  isUnpublishedScheduledLog
 };

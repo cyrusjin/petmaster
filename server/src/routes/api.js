@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const { authRequired, wrapAction } = require('../middleware/auth');
@@ -7,6 +8,7 @@ const storeService = require('../services/storeService');
 const orderService = require('../services/orderService');
 const petService = require('../services/petService');
 const dailyService = require('../services/dailyService');
+const mediaCheckService = require('../services/mediaCheckService');
 const oss = require('../oss');
 const config = require('../config');
 
@@ -23,10 +25,27 @@ const dailyRouter = express.Router();
 dailyRouter.post('/', authRequired, wrapAction((event, openid) => dailyService.handle(event, openid)));
 
 const uploadDir = path.join(config.media.root, '_tmp');
-fs.mkdirSync(uploadDir, { recursive: true });
+
+function ensureUploadTmpDir() {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+ensureUploadTmpDir();
 
 const upload = multer({
-  dest: uploadDir,
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      try {
+        ensureUploadTmpDir();
+        cb(null, uploadDir);
+      } catch (err) {
+        cb(err);
+      }
+    },
+    filename: (req, file, cb) => {
+      cb(null, `${Date.now()}_${crypto.randomBytes(8).toString('hex')}`);
+    }
+  }),
   limits: { fileSize: 50 * 1024 * 1024 }
 });
 
@@ -68,13 +87,20 @@ uploadRouter.post('/', authRequired, upload.single('file'), async (req, res) => 
         console.warn('[upload] generate video cover failed', publicUrl, err.message || err);
       }
     }
+    // 微信内容安全：同步拦违规图；异步结果再删文件
+    await mediaCheckService.moderateUploadedMedia({
+      publicUrl,
+      req,
+      folder: String(key).split('/')[0] || ''
+    });
     return res.status(200).json({ success: true, url: publicUrl });
   } catch (err) {
     console.error('upload failed', err);
     if (req.file && req.file.path) {
       try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
     }
-    return res.status(500).json({
+    const status = err && err.code === 'MEDIA_RISKY' ? 400 : 500;
+    return res.status(status).json({
       success: false,
       errMsg: (err && err.message) || '上传失败'
     });

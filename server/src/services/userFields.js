@@ -18,14 +18,16 @@ function isMerchantApprovedFromDoc(doc) {
   return normalizeIsMerchant(doc.isMerchant);
 }
 
-/** 商家身份绑定的店铺（owner / staff） */
+/** 商家身份绑定的店铺（owner / staff / 待审 / 已拒绝） */
 function resolveMerchantStoreId(doc) {
   if (!doc) return '';
   const explicit = (doc.merchantStoreId || '').trim();
   if (explicit) return explicit;
   const legacy = (doc.store_id || '').trim();
-  if (legacy && isMerchantApprovedFromDoc(doc)) return legacy;
-  if (legacy && normalizeMerchantStatus(doc.merchantStatus) === 'pending') return legacy;
+  if (!legacy) return '';
+  if (isMerchantApprovedFromDoc(doc)) return legacy;
+  const status = normalizeMerchantStatus(doc.merchantStatus);
+  if (status === 'pending' || status === 'rejected' || status === 'disabled') return legacy;
   return '';
 }
 

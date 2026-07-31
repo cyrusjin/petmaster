@@ -984,6 +984,13 @@ Page({
     this.onOpenContractSign();
   },
 
+  onPreviewNoticePhoto(e) {
+    const url = e.currentTarget.dataset.url;
+    const urls = (this.data.store && this.data.store.noticePhotos) || [];
+    if (!url || !urls.length) return;
+    wx.previewImage({ current: url, urls });
+  },
+
   onGoPets() {
     wx.navigateTo({ url: '/pages/user/pet-form/pet-form' });
   }

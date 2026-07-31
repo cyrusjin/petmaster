@@ -304,6 +304,13 @@ Page({
     wx.previewImage({ current: url, urls });
   },
 
+  onPreviewIntroPhoto(e) {
+    const url = e.currentTarget.dataset.url;
+    const urls = (this.data.currentStore && this.data.currentStore.introPhotos) || [];
+    if (!url || !urls.length) return;
+    wx.previewImage({ current: url, urls });
+  },
+
   onOpenStoreLocation() {
     const store = this.data.currentStore;
     if (!store || !store.hasLocation) {

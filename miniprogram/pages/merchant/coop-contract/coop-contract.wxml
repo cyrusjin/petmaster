@@ -15,7 +15,6 @@
           <text class="party-label">{{doc.partyB.label}}</text>
           <text class="party-line">平台名称：{{doc.partyB.name}}</text>
           <text class="party-line">主体身份：{{doc.partyB.role}}</text>
-          <text class="party-line">联系方式：{{doc.partyB.contact}}</text>
         </view>
       </view>
 
